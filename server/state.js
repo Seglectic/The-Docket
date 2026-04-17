@@ -1,4 +1,5 @@
 const { now, pickWeighted, randomId } = require("./utils");
+const { deriveWheelProfile } = require("../client/overlay/spin-plan");
 
 class DocketState {
   constructor(store, config, options = {}) {
@@ -11,22 +12,26 @@ class DocketState {
 
   bootstrap() {
     this.store.ensure();
+    this.ensureWheelConfig();
+    this.cleanupPersistedQueue();
     this.recoverActiveSpin();
   }
 
   snapshot() {
+    const wheelConfig = this.getWheelConfig();
     return {
       games: this.getGames(),
       specialEntries: this.store.readJson("specialEntries"),
+      wheelConfig,
       queue: this.store.readJson("queue"),
       spins: this.store.readJson("spins"),
       session: this.store.readJson("session"),
       activeSpin: this.getActiveSpin(),
       lastCompletedSpin: this.getLastCompletedSpin(),
       config: {
-        wheel: this.config.wheel,
+        wheel: wheelConfig,
         features: this.config.features,
-        overlayTitle: this.config.wheel?.overlayTitle || "The Docket",
+        overlayTitle: wheelConfig.overlayTitle || "The Docket",
       },
     };
   }
@@ -38,6 +43,7 @@ class DocketState {
       activeSpin: state.activeSpin,
       lastCompletedSpin: state.lastCompletedSpin,
       overlayTitle: state.config.overlayTitle,
+      wheelConfig: state.config.wheel || {},
     };
   }
 
@@ -64,6 +70,71 @@ class DocketState {
 
   setQueue(queue) {
     this.store.writeJson("queue", queue);
+  }
+
+  getWheelConfig() {
+    return this.store.readJson("wheelConfig");
+  }
+
+  setWheelConfig(wheelConfig) {
+    this.store.writeJson("wheelConfig", wheelConfig);
+  }
+
+  ensureWheelConfig() {
+    const current = this.store.readJson("wheelConfig");
+    const needsNormalization =
+      !current ||
+      !current.physics ||
+      !current.timings ||
+      !Number.isFinite(Number(current.spinDurationMs)) ||
+      !Number.isFinite(Number(current.revealDurationMs));
+
+    if (!needsNormalization) {
+      return current;
+    }
+
+    const normalized = this.updateWheelConfig({
+      countdownSeconds: current?.countdownSeconds,
+      overlayTitle: current?.overlayTitle,
+      physics: current?.physics,
+    });
+    return normalized;
+  }
+
+  updateWheelConfig(input = {}) {
+    const current = this.getWheelConfig();
+    const base = {
+      ...current,
+      ...input,
+      countdownSeconds: Number(input.countdownSeconds ?? current.countdownSeconds),
+      overlayTitle: input.overlayTitle ?? current.overlayTitle,
+      physics: {
+        ...(current.physics || {}),
+        ...(input.physics || {}),
+      },
+    };
+    const derived = deriveWheelProfile(base);
+    const wheelConfig = {
+      ...base,
+      physics: derived.physics,
+      timings: derived.timings,
+      spinDurationMs: derived.spinDurationMs,
+      revealDurationMs: derived.revealDurationMs,
+    };
+    this.setWheelConfig(wheelConfig);
+    this.record("wheel.updated", {
+      spinDurationMs: wheelConfig.spinDurationMs,
+      physics: wheelConfig.physics,
+    });
+    return wheelConfig;
+  }
+
+  cleanupPersistedQueue() {
+    const queue = this.getQueue();
+    const cleaned = queue.filter((entry) => entry.status === "queued" || entry.status === "processing");
+    if (cleaned.length !== queue.length) {
+      this.setQueue(cleaned);
+    }
   }
 
   getSpins() {
@@ -112,7 +183,11 @@ class DocketState {
     };
     queue.push(item);
     this.setQueue(queue);
-    this.record("queue.added", item);
+    this.record("queue.added", {
+      id: item.id,
+      source: item.source,
+      actionType: item.actionType,
+    });
     return item;
   }
 
@@ -122,9 +197,7 @@ class DocketState {
     if (!item) {
       throw new Error("Queue item not found");
     }
-    item.status = "canceled";
-    item.completedAt = now();
-    this.setQueue(queue);
+    this.setQueue(queue.filter((entry) => entry.id !== id));
     this.record("queue.canceled", { id });
     return item;
   }
@@ -218,7 +291,7 @@ class DocketState {
     if (this.getActiveSpin()) {
       throw new Error("A spin is already active");
     }
-    const countdownMs = Number(this.config.wheel?.countdownSeconds || 10) * 1000;
+    const countdownMs = Number(this.getWheelConfig().countdownSeconds || 10) * 1000;
     const games = this.buildEligibleEntries("in");
     if (!games.length) {
       throw new Error("No eligible entries available");
@@ -275,11 +348,7 @@ class DocketState {
       actionType: "add_weight",
       userInput,
     });
-    queueItem.status = "completed";
-    queueItem.completedAt = now();
-    queueItem.spinSessionId = spin.id;
-    const queue = this.getQueue().map((entry) => (entry.id === queueItem.id ? queueItem : entry));
-    this.setQueue(queue);
+    this.setQueue(this.getQueue().filter((entry) => entry.id !== queueItem.id));
     target.bonusWeight += Number(weightDelta || 1);
     target.finalWeight = target.baseWeight + target.bonusWeight;
     this.upsertSpin(spin);
@@ -332,6 +401,7 @@ class DocketState {
     if (!active) {
       return;
     }
+    const wheelConfig = this.getWheelConfig();
     if (active.status === "countdown") {
       const ms = new Date(active.countdownEndsAt).getTime() - Date.now();
       if (ms <= 0) {
@@ -342,11 +412,31 @@ class DocketState {
       return;
     }
     if (active.status === "spinning") {
-      this.scheduleReveal(active.id, Number(this.config.wheel?.spinDurationMs || 6500));
+      const revealAt = this.getRevealAt(active, wheelConfig);
+      const ms = new Date(revealAt).getTime() - Date.now();
+      if (ms <= 0) {
+        active.status = "reveal";
+        this.upsertSpin(active);
+        const completeAt = this.getCompleteAt(active, wheelConfig);
+        const completeMs = new Date(completeAt).getTime() - Date.now();
+        if (completeMs <= 0) {
+          this.completeSpin(active.id);
+        } else {
+          this.scheduleComplete(active.id, completeMs);
+        }
+      } else {
+        this.scheduleReveal(active.id, ms);
+      }
       return;
     }
     if (active.status === "reveal") {
-      this.scheduleComplete(active.id, Number(this.config.wheel?.revealDurationMs || 5000));
+      const completeAt = this.getCompleteAt(active, wheelConfig);
+      const ms = new Date(completeAt).getTime() - Date.now();
+      if (ms <= 0) {
+        this.completeSpin(active.id);
+      } else {
+        this.scheduleComplete(active.id, ms);
+      }
       return;
     }
     this.setSession({ activeSpinId: null });
@@ -390,7 +480,7 @@ class DocketState {
     spins.push(spin);
     this.setSpins(spins);
     this.setSession({ activeSpinId: spin.id });
-    this.scheduleReveal(spin.id, Number(this.config.wheel?.spinDurationMs || 6500));
+    this.scheduleReveal(spin.id, Number(this.getWheelConfig().spinDurationMs || 6500));
     return spin;
   }
 
@@ -410,7 +500,7 @@ class DocketState {
     spin.winner = winner ? { ...winner } : null;
     spin.status = "spinning";
     this.upsertSpin(spin);
-    this.scheduleReveal(spin.id, Number(this.config.wheel?.spinDurationMs || 6500));
+    this.scheduleReveal(spin.id, Number(this.getWheelConfig().spinDurationMs || 6500));
     this.record("spin.countdown_resolved", { spinId: spin.id });
     return spin;
   }
@@ -454,10 +544,7 @@ class DocketState {
 
     this.setGames(games);
     if (queueItem) {
-      queueItem.status = "completed";
-      queueItem.completedAt = now();
-      queueItem.spinSessionId = spin.id;
-      this.setQueue(queue);
+      this.setQueue(queue.filter((entry) => entry.id !== queueItem.id));
     }
   }
 
@@ -520,7 +607,7 @@ class DocketState {
       }
       spin.status = "reveal";
       this.upsertSpin(spin);
-      this.scheduleComplete(spinId, Number(this.config.wheel?.revealDurationMs || 5000));
+      this.scheduleComplete(spinId, Number(this.getWheelConfig().revealDurationMs || 5000));
     }, Math.max(0, delayMs));
     this.timers.set(spinId, timer);
   }
@@ -535,6 +622,20 @@ class DocketState {
       }
     }, Math.max(0, delayMs));
     this.timers.set(spinId, timer);
+  }
+
+  getRevealAt(spin, wheelConfig = this.getWheelConfig()) {
+    return new Date(
+      new Date(spin.startedAt).getTime() + Number(wheelConfig.spinDurationMs || 6500),
+    ).toISOString();
+  }
+
+  getCompleteAt(spin, wheelConfig = this.getWheelConfig()) {
+    return new Date(
+      new Date(spin.startedAt).getTime() +
+        Number(wheelConfig.spinDurationMs || 6500) +
+        Number(wheelConfig.revealDurationMs || 5000),
+    ).toISOString();
   }
 
   clearTimer(spinId) {

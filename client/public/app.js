@@ -9,7 +9,7 @@ const appState = {
 
 function connect() {
   const protocol = location.protocol === "https:" ? "wss" : "ws";
-  const socket = new WebSocket(`${protocol}://${location.host}/ws`);
+  const socket = new WebSocket(`${protocol}://${location.host}/ws?client=public`);
   socket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
     if (message.type === "state" && message.payload.public) {

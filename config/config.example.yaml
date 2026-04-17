@@ -5,9 +5,14 @@ auth:
   sharedSecret: "change-me"
 wheel:
   countdownSeconds: 10
-  spinDurationMs: 6500
-  revealDurationMs: 5000
   overlayTitle: "The Docket"
+  physics:
+    wheelMass: 1.20
+    launchForce: 1.45
+    drag: 0.12
+    brakeStrength: 1.10
+    minCruiseMs: 3800
+    revealDelayMs: 1200
 specialEntries:
   viewersChoice:
     enabled: true

@@ -39,6 +39,7 @@ test("storage initializes missing files", () => {
   const { tempRoot } = setup();
   const files = fs.readdirSync(tempRoot);
   assert(files.includes("games.json"));
+  assert(files.includes("wheel-config.json"));
   assert(files.includes("queue.json"));
   assert(files.includes("events.jsonl"));
 });
@@ -48,7 +49,8 @@ test("queue insertion and cancel behavior works", () => {
   const item = state.addQueueItem({ viewerName: "Alice", actionType: "restore" });
   assert.equal(item.status, "queued");
   const canceled = state.cancelQueueItem(item.id);
-  assert.equal(canceled.status, "canceled");
+  assert.equal(canceled.id, item.id);
+  assert.equal(state.getQueue().find((entry) => entry.id === item.id), undefined);
 });
 
 test("restore spins from out entries only", () => {
@@ -69,6 +71,16 @@ test("lock it in can win on the in wheel", async () => {
   state.completeSpin(spin.id);
   const lockedGame = state.getGames().find((entry) => entry.locked);
   assert(lockedGame);
+});
+
+test("completed queue items are removed after spin resolution", () => {
+  const { state } = setup();
+  const item = state.addQueueItem({ viewerName: "Alice", actionType: "restore" });
+  const spin = state.startQueueSpin(item.id);
+  spin.status = "reveal";
+  state.upsertSpin(spin);
+  state.completeSpin(spin.id);
+  assert.equal(state.getQueue().find((entry) => entry.id === item.id), undefined);
 });
 
 test("countdown spin accepts weight before cutoff and resolves after cutoff", async () => {
@@ -98,4 +110,66 @@ test("active session survives restart and resolves overdue countdowns", () => {
   const recovered = new DocketState(store, config, { random: () => 0 });
   recovered.bootstrap();
   assert.equal(recovered.getActiveSpin().status, "spinning");
+});
+
+test("overdue spinning session is completed during recovery", () => {
+  const { state, tempRoot } = setup();
+  const item = state.addQueueItem({ viewerName: "Alice", actionType: "restore" });
+  const spin = state.startQueueSpin(item.id);
+  spin.startedAt = new Date(Date.now() - 20_000).toISOString();
+  state.upsertSpin(spin);
+
+  const config = createConfig();
+  const store = new FileStore(config);
+  store.dataDir = tempRoot;
+  store.readSeedGames = () => [];
+  const recovered = new DocketState(store, config, { random: () => 0 });
+  recovered.bootstrap();
+
+  assert.equal(recovered.getActiveSpin(), null);
+  assert.equal(recovered.findSpin(spin.id).status, "complete");
+  assert.equal(recovered.getQueue().find((entry) => entry.id === item.id), undefined);
+});
+
+test("bootstrap prunes completed and canceled queue items from persisted data", () => {
+  const { state, tempRoot } = setup();
+  state.setQueue([
+    { id: "queued-1", status: "queued" },
+    { id: "done-1", status: "completed" },
+    { id: "canceled-1", status: "canceled" },
+    { id: "processing-1", status: "processing" },
+  ]);
+
+  const config = createConfig();
+  const store = new FileStore(config);
+  store.dataDir = tempRoot;
+  store.readSeedGames = () => [];
+  const recovered = new DocketState(store, config, { random: () => 0 });
+  recovered.bootstrap();
+
+  assert.deepEqual(
+    recovered.getQueue().map((entry) => entry.id),
+    ["queued-1", "processing-1"],
+  );
+});
+
+test("wheel config updates persist physics sliders and recompute derived timings", () => {
+  const { state } = setup();
+  const updated = state.updateWheelConfig({
+    physics: {
+      wheelMass: 1.6,
+      launchForce: 1.8,
+      drag: 0.15,
+      brakeStrength: 1.25,
+      minCruiseMs: 5000,
+      revealDelayMs: 1400,
+    },
+  });
+
+  assert.equal(updated.physics.wheelMass, 1.6);
+  assert.equal(updated.physics.launchForce, 1.8);
+  assert.equal(updated.timings.cruiseMs, 5000);
+  assert.equal(updated.timings.revealDelayMs, 1400);
+  assert(updated.spinDurationMs > 5000);
+  assert.equal(state.getWheelConfig().physics.drag, 0.15);
 });

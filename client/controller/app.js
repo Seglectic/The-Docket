@@ -9,6 +9,7 @@ const els = {
   loginForm: document.getElementById("login-form"),
   loginError: document.getElementById("login-error"),
   statusLine: document.getElementById("status-line"),
+  instanceLine: document.getElementById("instance-line"),
   queueForm: document.getElementById("queue-form"),
   queueList: document.getElementById("queue-list"),
   activeSpin: document.getElementById("active-spin"),
@@ -22,6 +23,20 @@ const els = {
   weightTarget: document.getElementById("weight-target"),
   testRedeemButton: document.getElementById("test-redeem-button"),
   testRedeemStatus: document.getElementById("test-redeem-status"),
+  wheelForm: document.getElementById("wheel-form"),
+  wheelTotal: document.getElementById("wheel-total"),
+  wheelMass: document.getElementById("wheel-mass"),
+  launchForce: document.getElementById("launch-force"),
+  drag: document.getElementById("drag"),
+  brakeStrength: document.getElementById("brake-strength"),
+  minCruiseMs: document.getElementById("min-cruise-ms"),
+  revealDelayMs: document.getElementById("reveal-delay-ms"),
+  massOutput: document.getElementById("mass-output"),
+  launchOutput: document.getElementById("launch-output"),
+  dragOutput: document.getElementById("drag-output"),
+  brakeOutput: document.getElementById("brake-output"),
+  cruiseMinOutput: document.getElementById("cruise-min-output"),
+  revealOutput: document.getElementById("reveal-output"),
 };
 
 async function request(url, options = {}) {
@@ -47,7 +62,7 @@ async function loadAdminState() {
 
 function connectSocket() {
   const protocol = location.protocol === "https:" ? "wss" : "ws";
-  state.socket = new WebSocket(`${protocol}://${location.host}/ws`);
+  state.socket = new WebSocket(`${protocol}://${location.host}/ws?client=controller`);
   state.socket.addEventListener("open", () => {
     els.statusLine.textContent = "Live connection ready";
   });
@@ -191,15 +206,63 @@ function renderGames() {
   });
 }
 
+function renderWheelFeel() {
+  const physics = state.admin.config?.wheel?.physics;
+  const timings = state.admin.config?.wheel?.timings;
+  if (!physics || !timings) {
+    return;
+  }
+
+  syncNumericSlider(els.wheelMass, els.massOutput, physics.wheelMass);
+  syncNumericSlider(els.launchForce, els.launchOutput, physics.launchForce);
+  syncNumericSlider(els.drag, els.dragOutput, physics.drag);
+  syncNumericSlider(els.brakeStrength, els.brakeOutput, physics.brakeStrength);
+  syncMsSlider(els.minCruiseMs, els.cruiseMinOutput, physics.minCruiseMs);
+  syncMsSlider(els.revealDelayMs, els.revealOutput, physics.revealDelayMs);
+
+  els.wheelTotal.textContent =
+    `Motion ${formatMs(state.admin.config.wheel.spinDurationMs)} • Reveal ${formatMs(timings.revealDelayMs)}`;
+}
+
+function syncNumericSlider(input, output, value) {
+  if (document.activeElement !== input) {
+    input.value = value;
+  }
+  output.textContent = Number(input.value).toFixed(2);
+}
+
+function syncMsSlider(input, output, value) {
+  if (document.activeElement !== input) {
+    input.value = value;
+  }
+  output.textContent = formatMs(Number(input.value));
+}
+
+function formatMs(value) {
+  return `${(Number(value) / 1000).toFixed(2)}s`;
+}
+
 function render() {
   if (!state.admin) {
     return;
   }
   els.loginPanel.classList.add("hidden");
   els.app.classList.remove("hidden");
+  renderConnections();
   renderQueue();
   renderSpin();
   renderGames();
+  renderWheelFeel();
+}
+
+function renderConnections() {
+  const connections = state.admin.connections;
+  if (!connections) {
+    els.instanceLine.textContent = "Instances: --";
+    return;
+  }
+  els.instanceLine.textContent =
+    `Instances: ${connections.total} total • C ${connections.controller} • O ${connections.overlay} • P ${connections.public}`;
 }
 
 function escapeHtml(value) {
@@ -299,6 +362,38 @@ els.testRedeemButton.addEventListener("click", async () => {
   } finally {
     els.testRedeemButton.disabled = false;
   }
+});
+
+["input", "change"].forEach((eventName) => {
+  [
+    els.wheelMass,
+    els.launchForce,
+    els.drag,
+    els.brakeStrength,
+    els.minCruiseMs,
+    els.revealDelayMs,
+  ].forEach((input) => {
+    input.addEventListener(eventName, renderWheelFeel);
+  });
+});
+
+els.wheelForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await request("/api/wheel-config", {
+    method: "POST",
+    body: JSON.stringify({
+      physics: {
+        wheelMass: Number(els.wheelMass.value),
+        launchForce: Number(els.launchForce.value),
+        drag: Number(els.drag.value),
+        brakeStrength: Number(els.brakeStrength.value),
+        minCruiseMs: Number(els.minCruiseMs.value),
+        revealDelayMs: Number(els.revealDelayMs.value),
+      },
+    }),
+  });
+  els.statusLine.textContent = "Wheel feel updated";
+  loadAdminState();
 });
 
 loadAdminState().then(connectSocket).catch(() => {

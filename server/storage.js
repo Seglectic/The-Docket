@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { ROOT } = require("./config");
+const { deriveWheelProfile } = require("../client/overlay/spin-plan");
 
 const DATA_DIR = path.join(ROOT, "data");
 const SEED_PATH = path.join(DATA_DIR, "games.seed.json");
@@ -8,6 +9,7 @@ const SEED_PATH = path.join(DATA_DIR, "games.seed.json");
 const FILES = {
   games: "games.json",
   specialEntries: "special-entries.json",
+  wheelConfig: "wheel-config.json",
   queue: "queue.json",
   spins: "spins.json",
   session: "session.json",
@@ -44,6 +46,7 @@ class FileStore {
     const defaults = {
       games: this.readSeedGames(),
       specialEntries: this.applyConfigToSpecialEntries(DEFAULT_SPECIAL_ENTRIES),
+      wheelConfig: this.defaultWheelConfig(),
       queue: [],
       spins: [],
       session: { activeSpinId: null },
@@ -59,6 +62,24 @@ class FileStore {
         }
       }
     }
+  }
+
+  defaultWheelConfig() {
+    const base = {
+      countdownSeconds: Number(this.config.wheel?.countdownSeconds || 10),
+      overlayTitle: this.config.wheel?.overlayTitle || "The Docket",
+      physics: {
+        ...(this.config.wheel?.physics || {}),
+      },
+    };
+    const derived = deriveWheelProfile(base);
+    return {
+      ...base,
+      physics: derived.physics,
+      timings: derived.timings,
+      spinDurationMs: derived.spinDurationMs,
+      revealDurationMs: derived.revealDurationMs,
+    };
   }
 
   readSeedGames() {

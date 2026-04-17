@@ -23,6 +23,7 @@
           <div>
             <h1>The Docket Controller</h1>
             <p id="status-line">Connecting…</p>
+            <p id="instance-line" class="muted">Instances: --</p>
           </div>
           <div class="actions">
             <button id="refresh-button">Refresh</button>
@@ -57,7 +58,9 @@
               </select>
               <input id="user-input" placeholder="Optional note / input" />
               <button type="submit">Add Manual Redeem</button>
+              <button id="test-redeem-button" class="arcade-button" type="button">Test Redeem</button>
             </form>
+            <div id="test-redeem-status" class="test-redeem-inline muted">No test redeem queued yet.</div>
             <div id="queue-list" class="stack"></div>
           </article>
 
@@ -74,14 +77,49 @@
               <input id="weight-delta" type="number" min="1" value="1" />
               <button type="submit">Add Weight To Active Spin</button>
             </form>
+
+            <section class="wheel-feel">
+              <header class="wheel-feel__header">
+                <h3>Wheel Feel</h3>
+                <div id="wheel-total" class="muted"></div>
+              </header>
+              <form id="wheel-form" class="stack">
+                <label class="slider-row">
+                  <span>Wheel Mass</span>
+                  <strong id="mass-output"></strong>
+                  <input id="wheel-mass" type="range" min="0.7" max="2.5" step="0.05" />
+                </label>
+                <label class="slider-row">
+                  <span>Launch Force</span>
+                  <strong id="launch-output"></strong>
+                  <input id="launch-force" type="range" min="0.8" max="2.5" step="0.05" />
+                </label>
+                <label class="slider-row">
+                  <span>Drag</span>
+                  <strong id="drag-output"></strong>
+                  <input id="drag" type="range" min="0.02" max="0.25" step="0.01" />
+                </label>
+                <label class="slider-row">
+                  <span>Brake Strength</span>
+                  <strong id="brake-output"></strong>
+                  <input id="brake-strength" type="range" min="0.8" max="2.0" step="0.05" />
+                </label>
+                <label class="slider-row">
+                  <span>Minimum Cruise</span>
+                  <strong id="cruise-min-output"></strong>
+                  <input id="min-cruise-ms" type="range" min="2500" max="9000" step="100" />
+                </label>
+                <label class="slider-row">
+                  <span>Reveal Delay</span>
+                  <strong id="reveal-output"></strong>
+                  <input id="reveal-delay-ms" type="range" min="900" max="2500" step="50" />
+                </label>
+                <button type="submit">Save Wheel Feel</button>
+              </form>
+            </section>
           </article>
         </section>
 
-        <div class="test-trigger">
-          <div class="test-trigger__label">Fast Local Testing</div>
-          <button id="test-redeem-button" class="arcade-button" type="button">Test Redeem</button>
-          <div id="test-redeem-status" class="test-trigger__status">No test redeem queued yet.</div>
-        </div>
       </section>
     </main>
     <script src="/client/controller/app.js" defer></script>

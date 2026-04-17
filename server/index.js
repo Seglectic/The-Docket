@@ -17,12 +17,38 @@ state.bootstrap();
 const server = http.createServer();
 const wss = new WebSocketServer({ noServer: true });
 
+function getConnectionSummary() {
+  const summary = {
+    total: 0,
+    controller: 0,
+    overlay: 0,
+    public: 0,
+    unknown: 0,
+  };
+  for (const client of wss.clients) {
+    if (client.readyState !== 1) {
+      continue;
+    }
+    summary.total += 1;
+    const role = client.clientRole || "unknown";
+    if (summary[role] !== undefined) {
+      summary[role] += 1;
+    } else {
+      summary.unknown += 1;
+    }
+  }
+  return summary;
+}
+
 function broadcastState() {
   const payload = JSON.stringify({
     type: "state",
     payload: {
       public: state.publicSnapshot(),
-      admin: state.controllerSnapshot(),
+      admin: {
+        ...state.controllerSnapshot(),
+        connections: getConnectionSummary(),
+      },
     },
   });
   for (const client of wss.clients) {
@@ -48,6 +74,7 @@ server.on("upgrade", (req, socket, head) => {
     return;
   }
   wss.handleUpgrade(req, socket, head, (ws) => {
+    ws.clientRole = url.searchParams.get("client") || "unknown";
     wss.emit("connection", ws, req);
   });
 });
@@ -58,10 +85,17 @@ wss.on("connection", (ws) => {
       type: "state",
       payload: {
         public: state.publicSnapshot(),
-        admin: state.controllerSnapshot(),
+        admin: {
+          ...state.controllerSnapshot(),
+          connections: getConnectionSummary(),
+        },
       },
     }),
   );
+  broadcastState();
+  ws.on("close", () => {
+    broadcastState();
+  });
 });
 
 // Broadcast state changes from async timers without requiring an API request.

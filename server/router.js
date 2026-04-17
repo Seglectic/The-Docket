@@ -177,6 +177,15 @@ function createRouter({ rootDir, auth, state, broadcaster }) {
         return;
       }
 
+      if (pathname === "/api/wheel-config" && req.method === "POST") {
+        auth.requireAuth(req);
+        const body = await readBody(req);
+        const wheelConfig = state.updateWheelConfig(body);
+        broadcaster();
+        jsonResponse(res, 200, wheelConfig);
+        return;
+      }
+
       jsonResponse(res, 404, { error: "Not found" });
     } catch (error) {
       const statusCode = error.statusCode || 400;

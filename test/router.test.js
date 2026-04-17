@@ -131,3 +131,49 @@ test("POST /api/queue/test enqueues a generated redeem when authenticated", asyn
   assert(["restore", "eliminate"].includes(body.actionType));
   assert.equal(state.getQueue().length, 1);
 });
+
+test("POST /api/wheel-config persists physics slider settings when authenticated", async () => {
+  const { state, config } = createState();
+  const auth = new AuthManager(config);
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth,
+    state,
+    broadcaster: () => {},
+  });
+
+  const login = await runRoute(route, {
+    method: "POST",
+    url: "/api/login",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: { secret: "test-secret" },
+  });
+  const cookie = login.headers["Set-Cookie"] || login.headers["set-cookie"];
+
+  const response = await runRoute(route, {
+    method: "POST",
+    url: "/api/wheel-config",
+    headers: {
+      "content-type": "application/json",
+      cookie,
+    },
+    body: {
+      physics: {
+        wheelMass: 1.6,
+        launchForce: 1.8,
+        drag: 0.15,
+        brakeStrength: 1.2,
+        minCruiseMs: 4500,
+        revealDelayMs: 1400,
+      },
+    },
+  });
+
+  const body = JSON.parse(response.body);
+  assert.equal(response.statusCode, 200);
+  assert.equal(body.physics.wheelMass, 1.6);
+  assert.equal(body.timings.cruiseMs, 4500);
+  assert(body.spinDurationMs > 4500);
+});

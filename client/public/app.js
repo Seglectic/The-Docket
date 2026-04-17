@@ -32,10 +32,12 @@ async function bootstrap() {
 function render() {
   const data = appState.data;
   title.textContent = data.overlayTitle || "The Docket";
-  if (data.activeSpin?.winner) {
+  if (data.activeSpin?.winner && (data.activeSpin.status === "reveal" || data.activeSpin.status === "complete")) {
     lastAction.textContent = `${data.activeSpin.viewerName || "Streamer"} • ${data.activeSpin.type} • ${data.activeSpin.winner.label}`;
   } else if (data.lastCompletedSpin?.winner) {
     lastAction.textContent = `Last result: ${data.lastCompletedSpin.winner.label}`;
+  } else if (data.activeSpin) {
+    lastAction.textContent = `${data.activeSpin.viewerName || "Streamer"} • ${data.activeSpin.type} in progress`;
   } else {
     lastAction.textContent = "Live docket board";
   }
@@ -49,7 +51,7 @@ function renderList(target, games) {
     .map(
       (game) => `
         <div class="item">
-          <div class="cover" style="${game.cover ? `background-image:url('${encodeURI(game.cover)}')` : ""}"></div>
+          <div class="cover" style="${resolveCoverStyle(game.cover, game.coverFallback)}"></div>
           <div>
             <strong>${escapeHtml(game.title)}</strong>
             <div class="muted">Weight ${game.baseWeight}${game.locked ? " • Locked" : ""}</div>
@@ -58,6 +60,11 @@ function renderList(target, games) {
       `,
     )
     .join("");
+}
+
+function resolveCoverStyle(primary, fallback) {
+  const url = primary || fallback || "";
+  return url ? `background-image:url('${encodeURI(url)}')` : "";
 }
 
 function escapeHtml(value) {

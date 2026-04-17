@@ -9,6 +9,7 @@ const { createRouter } = require("./router");
 const { GameDatabaseService } = require("./game-db");
 const { TwitchAuthService } = require("./twitch-auth");
 const { TwitchEventSubService } = require("./twitch-eventsub");
+const { CoverCacheService } = require("./cover-cache");
 
 const config = loadConfig();
 const store = new FileStore(config);
@@ -16,6 +17,7 @@ const state = new DocketState(store, config);
 const auth = new AuthManager(config);
 const gameDatabase = new GameDatabaseService(config, store);
 const twitchAuth = new TwitchAuthService(config, store);
+const coverCache = new CoverCacheService(store);
 const twitchEventSub = new TwitchEventSubService(config, twitchAuth, state, {
   onStateChange: broadcastState,
   onRedemption: (payload) => {
@@ -87,6 +89,7 @@ const route = createRouter({
   gameDatabase,
   twitchAuth,
   twitchEventSub,
+  coverCache,
   buildAdminState: () => ({
     ...state.controllerSnapshot(),
     connections: getConnectionSummary(),
@@ -98,6 +101,35 @@ const route = createRouter({
   }),
   broadcaster: broadcastState,
 });
+
+async function warmExistingGameCovers() {
+  const games = state.getGames();
+  let changed = false;
+  for (const game of games) {
+    const remoteUrl =
+      (/^https?:\/\//i.test(game.cover || "") && game.cover) ||
+      (/^https?:\/\//i.test(game.coverFallback || "") && game.coverFallback) ||
+      "";
+    if (!remoteUrl) {
+      continue;
+    }
+    try {
+      const cached = await coverCache.cacheCover(remoteUrl, game.title || game.id);
+      if (cached.localUrl && game.cover !== cached.localUrl) {
+        state.updateGame(game.id, {
+          cover: cached.localUrl,
+          coverFallback: remoteUrl,
+        });
+        changed = true;
+      }
+    } catch (_) {
+      // Keep the existing remote cover if caching fails.
+    }
+  }
+  if (changed) {
+    broadcastState();
+  }
+}
 
 server.on("request", route);
 
@@ -153,6 +185,9 @@ server.listen(port, host, () => {
   console.log(`Controller: ${controllerUrl}`);
   console.log(`Overlay: ${overlayUrl}`);
   console.log(`Public: ${publicUrl}`);
+  warmExistingGameCovers().catch((error) => {
+    console.error(`Cover cache warmup failed: ${error.message}`);
+  });
   twitchEventSub.start().catch((error) => {
     console.error(`Twitch EventSub failed to start: ${error.message}`);
   });

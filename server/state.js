@@ -228,6 +228,7 @@ class DocketState {
       Object.assign(existing, {
         title: input.title,
         cover: input.cover || "",
+        coverFallback: input.coverFallback !== undefined ? input.coverFallback || "" : existing.coverFallback || "",
         status: input.status,
         baseWeight: Number(input.baseWeight || 1),
         sortOrder: Number(input.sortOrder || existing.sortOrder || games.length + 1),
@@ -245,6 +246,7 @@ class DocketState {
       id: input.id || randomId("game"),
       title: input.title,
       cover: input.cover || "",
+      coverFallback: input.coverFallback || "",
       status: input.status || "in",
       baseWeight: Number(input.baseWeight || 1),
       sortOrder: Number(input.sortOrder || games.length + 1),
@@ -326,6 +328,7 @@ class DocketState {
         entryId: entry.entryId,
         label: entry.label,
         cover: entry.cover,
+        coverFallback: entry.coverFallback || "",
         baseWeight: entry.baseWeight,
         bonusWeight: 0,
         finalWeight: entry.baseWeight,
@@ -571,6 +574,7 @@ class DocketState {
         entryId: game.id,
         label: game.title,
         cover: game.cover,
+        coverFallback: game.coverFallback || "",
         baseWeight: Number(game.baseWeight || 1),
       }));
     const specials = this.store

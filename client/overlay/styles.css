@@ -6,13 +6,21 @@
   --red: #ff5c75;
 }
 
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("/public/assets/fonts/SpaceGrotesk-Variable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+}
+
 html,
 body {
   margin: 0;
   background: var(--bg);
   overflow: hidden;
   color: var(--text);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
 }
 
 .overlay-shell {
@@ -42,6 +50,7 @@ body {
   height: 100%;
   display: grid;
   place-items: center;
+  position: relative;
 }
 
 canvas {
@@ -62,10 +71,11 @@ canvas {
   text-align: center;
   font-size: clamp(24px, 4vw, 54px);
   border: 2px solid rgba(255, 255, 255, 0.12);
+  z-index: 4;
 }
 
 .result-card.restore {
-  box-shadow: 0 0 50px rgba(143, 255, 170, 0.5);
+  box-shadow: 0 0 50px rgba(239, 200, 97, 0.5);
 }
 
 .result-card.eliminate {
@@ -74,6 +84,149 @@ canvas {
 
 .result-card.next_game {
   box-shadow: 0 0 50px rgba(239, 200, 97, 0.42);
+}
+
+.winner-stage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.winner-cover-shell {
+  position: relative;
+  width: min(48vw, 48vh);
+  max-width: 520px;
+  aspect-ratio: 3 / 4;
+  border-radius: 22px;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  background: rgba(8, 8, 14, 0.76);
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.48);
+  opacity: 0;
+  transform: scale(0.78);
+}
+
+.winner-cover-art {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.22)),
+    linear-gradient(135deg, rgba(116, 215, 236, 0.25), rgba(232, 109, 183, 0.12));
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+}
+
+.winner-cover-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.28));
+}
+
+.winner-stage.visible .winner-cover-shell {
+  animation: cover-pop 560ms cubic-bezier(0.2, 0.92, 0.28, 1) forwards;
+}
+
+.winner-stage.restore .winner-cover-shell {
+  box-shadow:
+    0 0 0 2px rgba(239, 200, 97, 0.22),
+    0 0 48px rgba(239, 200, 97, 0.58),
+    0 0 120px rgba(239, 200, 97, 0.36),
+    0 28px 60px rgba(0, 0, 0, 0.48);
+  animation:
+    cover-pop 560ms cubic-bezier(0.2, 0.92, 0.28, 1) forwards,
+    restore-aura 2200ms ease-in-out 1200ms infinite alternate;
+}
+
+.winner-stage.eliminate .winner-cover-art {
+  animation:
+    cover-pop 560ms cubic-bezier(0.2, 0.92, 0.28, 1) forwards,
+    eliminate-desaturate 720ms ease 1050ms forwards,
+    eliminate-shrink 520ms ease 1950ms forwards;
+}
+
+.winner-cover-x {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: clamp(120px, 15vw, 210px);
+  font-weight: 700;
+  color: rgba(255, 92, 117, 0.96);
+  text-shadow:
+    0 0 28px rgba(255, 92, 117, 0.52),
+    0 8px 28px rgba(0, 0, 0, 0.48);
+  opacity: 0;
+  transform: scale(1.08);
+}
+
+.winner-stage.eliminate .winner-cover-x {
+  animation: eliminate-x 420ms ease 2450ms forwards;
+}
+
+.winner-stage.no-cover .winner-cover-shell {
+  display: none;
+}
+
+@keyframes cover-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.78);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes restore-aura {
+  from {
+    transform: scale(1);
+    filter: saturate(1) brightness(1);
+  }
+
+  to {
+    transform: scale(1.045);
+    filter: saturate(1.12) brightness(1.12);
+  }
+}
+
+@keyframes eliminate-desaturate {
+  from {
+    filter: saturate(1) brightness(1);
+  }
+
+  to {
+    filter: grayscale(1) saturate(0.1) brightness(0.82);
+  }
+}
+
+@keyframes eliminate-shrink {
+  from {
+    transform: scale(1);
+  }
+
+  to {
+    transform: scale(0.94);
+  }
+}
+
+@keyframes eliminate-x {
+  from {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .hidden {

@@ -12,6 +12,7 @@ const MIME_TYPES = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
 };
 
 function sendFile(res, filePath) {
@@ -34,6 +35,7 @@ function createRouter({
   gameDatabase = { searchGames: async () => ({ enabled: false, configured: false, provider: "igdb", suggestions: [] }) },
   twitchAuth = { getPublicState: () => ({ configured: false, connected: false }), startAuthorization: () => "", completeAuthorization: async () => ({}), disconnect: () => ({ connected: false }) },
   twitchEventSub = { restart: async () => {}, stop: () => {} },
+  coverCache = { cacheCover: async (url) => ({ localUrl: url, remoteUrl: url, cached: false }) },
   buildAdminState = () => state.controllerSnapshot(),
 }) {
   return async function route(req, res) {
@@ -65,6 +67,10 @@ function createRouter({
       }
       if (pathname.startsWith("/public/assets/")) {
         sendFile(res, path.join(rootDir, pathname));
+        return;
+      }
+      if (pathname.startsWith("/media/covers/")) {
+        sendFile(res, path.join(state.store.dataDir, "media", "covers", path.basename(pathname)));
         return;
       }
 
@@ -219,6 +225,17 @@ function createRouter({
       if (pathname === "/api/games" && req.method === "POST") {
         auth.requireAuth(req);
         const body = await readBody(req);
+        if (body.cover && /^https?:\/\//i.test(body.cover)) {
+          try {
+            const cached = await coverCache.cacheCover(body.cover, body.title || body.id || "cover");
+            body.coverFallback = cached.remoteUrl;
+            if (cached.localUrl) {
+              body.cover = cached.localUrl;
+            }
+          } catch (_) {
+            body.coverFallback = body.cover;
+          }
+        }
         const game = state.upsertGame(body);
         broadcaster();
         jsonResponse(res, 201, game);

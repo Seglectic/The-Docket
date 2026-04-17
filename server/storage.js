@@ -46,6 +46,7 @@ class FileStore {
 
   ensure() {
     fs.mkdirSync(this.dataDir, { recursive: true });
+    fs.mkdirSync(path.join(this.dataDir, "media", "covers"), { recursive: true });
     const defaults = {
       games: this.readSeedGames(),
       specialEntries: this.applyConfigToSpecialEntries(DEFAULT_SPECIAL_ENTRIES),

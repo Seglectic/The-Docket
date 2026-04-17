@@ -178,7 +178,7 @@ function renderGames() {
       (game) => `
         <div class="game-row">
           <div class="game-row__media">
-            <div class="game-thumb" style="${game.cover ? `background-image:url('${encodeURI(game.cover)}')` : ""}"></div>
+            <div class="game-thumb" style="${coverStyle(game.cover, game.coverFallback)}"></div>
           </div>
           <div class="game-row__body">
           <header>
@@ -472,6 +472,11 @@ function updateCoverPreview(coverUrl) {
   }
   els.gameCoverPreview.textContent = "";
   els.gameCoverPreview.style.backgroundImage = `url("${trimmed.replaceAll('"', '\\"')}")`;
+}
+
+function coverStyle(primary, fallback) {
+  const url = primary || fallback || "";
+  return url ? `background-image:url('${encodeURI(url)}')` : "";
 }
 
 function clearGameMetadataSelection() {

@@ -82,6 +82,17 @@ function createTwitchAuthStub(overrides = {}) {
   };
 }
 
+function createCoverCacheStub(overrides = {}) {
+  return {
+    cacheCover: async (url) => ({
+      localUrl: "/media/covers/cached-cover.jpg",
+      remoteUrl: url,
+      cached: true,
+    }),
+    ...overrides,
+  };
+}
+
 function createMockResponse() {
   let resolveResponse;
   const done = new Promise((resolve) => {
@@ -413,4 +424,49 @@ test("GET /auth/twitch/callback redirects back to controller on success", async 
 
   assert.equal(response.statusCode, 302);
   assert.equal(response.headers.Location || response.headers.location, "/controller?twitch=connected");
+});
+
+test("POST /api/games caches remote cover art locally when authenticated", async () => {
+  const { state, config } = createState();
+  const auth = new AuthManager(config);
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth,
+    state,
+    gameDatabase: createGameDatabaseStub(),
+    coverCache: createCoverCacheStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
+    broadcaster: () => {},
+  });
+
+  const login = await runRoute(route, {
+    method: "POST",
+    url: "/api/login",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: { secret: "test-secret" },
+  });
+  const cookie = login.headers["Set-Cookie"] || login.headers["set-cookie"];
+
+  const response = await runRoute(route, {
+    method: "POST",
+    url: "/api/games",
+    headers: {
+      "content-type": "application/json",
+      cookie,
+    },
+    body: {
+      title: "Halo Infinite",
+      cover: "https://images.example/halo.jpg",
+      status: "in",
+      baseWeight: 1,
+    },
+  });
+
+  const body = JSON.parse(response.body);
+  assert.equal(response.statusCode, 201);
+  assert.equal(body.cover, "/media/covers/cached-cover.jpg");
+  assert.equal(body.coverFallback, "https://images.example/halo.jpg");
 });

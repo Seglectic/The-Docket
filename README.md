@@ -49,6 +49,7 @@ Runtime notes:
 
 - Search results are cached locally in `data/game-db-cache.json`.
 - Saved IGDB runtime settings are stored locally in `data/game-db-settings.json`.
+- Saved game covers are downloaded into `data/media/covers/` and served back from this app when available.
 - If IGDB is not configured, the add-game form still works manually.
 
 ## Twitch EventSub

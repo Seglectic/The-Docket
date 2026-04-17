@@ -26,7 +26,16 @@ function sendFile(res, filePath) {
   fs.createReadStream(filePath).pipe(res);
 }
 
-function createRouter({ rootDir, auth, state, broadcaster }) {
+function createRouter({
+  rootDir,
+  auth,
+  state,
+  broadcaster,
+  gameDatabase = { searchGames: async () => ({ enabled: false, configured: false, provider: "igdb", suggestions: [] }) },
+  twitchAuth = { getPublicState: () => ({ configured: false, connected: false }), startAuthorization: () => "", completeAuthorization: async () => ({}), disconnect: () => ({ connected: false }) },
+  twitchEventSub = { restart: async () => {}, stop: () => {} },
+  buildAdminState = () => state.controllerSnapshot(),
+}) {
   return async function route(req, res) {
     try {
       const url = new URL(req.url, `http://${req.headers.host}`);
@@ -86,7 +95,64 @@ function createRouter({ rootDir, auth, state, broadcaster }) {
 
       if (pathname === "/api/admin/state" && req.method === "GET") {
         auth.requireAuth(req);
-        jsonResponse(res, 200, state.controllerSnapshot());
+        jsonResponse(res, 200, buildAdminState());
+        return;
+      }
+
+      if (pathname === "/auth/twitch/start" && req.method === "GET") {
+        const sessionToken = auth.requireAuth(req);
+        const authorizeUrl = twitchAuth.startAuthorization(sessionToken);
+        res.writeHead(302, { Location: authorizeUrl });
+        res.end();
+        return;
+      }
+
+      if (pathname === "/auth/twitch/callback" && req.method === "GET") {
+        try {
+          await twitchAuth.completeAuthorization({
+            code: url.searchParams.get("code") || "",
+            state: url.searchParams.get("state") || "",
+          });
+          await twitchEventSub.restart();
+          broadcaster();
+          res.writeHead(302, { Location: "/controller?twitch=connected" });
+          res.end();
+        } catch (error) {
+          const message = encodeURIComponent(error.message || "Twitch connection failed");
+          res.writeHead(302, { Location: `/controller?twitch_error=${message}` });
+          res.end();
+        }
+        return;
+      }
+
+      if (pathname === "/api/twitch/disconnect" && req.method === "POST") {
+        auth.requireAuth(req);
+        const result = twitchAuth.disconnect();
+        twitchEventSub.stop();
+        broadcaster();
+        jsonResponse(res, 200, result);
+        return;
+      }
+
+      if (pathname === "/api/game-db/search" && req.method === "GET") {
+        auth.requireAuth(req);
+        const results = await gameDatabase.searchGames(url.searchParams.get("q") || "");
+        jsonResponse(res, 200, results);
+        return;
+      }
+
+      if (pathname === "/api/game-db/settings" && req.method === "GET") {
+        auth.requireAuth(req);
+        jsonResponse(res, 200, gameDatabase.publicSettings());
+        return;
+      }
+
+      if (pathname === "/api/game-db/settings" && req.method === "POST") {
+        auth.requireAuth(req);
+        const body = await readBody(req);
+        const settings = gameDatabase.updateSettings(body);
+        broadcaster();
+        jsonResponse(res, 200, settings);
         return;
       }
 

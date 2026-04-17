@@ -12,6 +12,15 @@ const { FileStore } = require("../server/storage");
 function createConfig() {
   return {
     auth: { sharedSecret: "test-secret" },
+    twitch: {
+      enabled: true,
+      scopes: "channel:read:redemptions",
+      app: {
+        clientId: "client-id",
+        clientSecret: "client-secret",
+        redirectUri: "http://localhost:3030/auth/twitch/callback",
+      },
+    },
     wheel: { countdownSeconds: 1, spinDurationMs: 10, revealDurationMs: 10, overlayTitle: "Test" },
     features: { manualMode: true, twitchEnabled: false },
     specialEntries: {
@@ -31,6 +40,46 @@ function createState() {
   const state = new DocketState(store, config, { random: () => 0.1 });
   state.bootstrap();
   return { state, config };
+}
+
+function createGameDatabaseStub(overrides = {}) {
+  return {
+    searchGames: async (query) => ({
+      enabled: true,
+      configured: true,
+      provider: "igdb",
+      suggestions: [
+        {
+          id: "123",
+          title: `Matched ${query}`,
+          cover: "https://images.example/test.jpg",
+          coverThumb: "https://images.example/test-thumb.jpg",
+          releaseYear: 2024,
+          source: "igdb",
+        },
+      ],
+      ...overrides,
+    }),
+  };
+}
+
+function createTwitchAuthStub(overrides = {}) {
+  return {
+    getPublicState: () => ({
+      configured: true,
+      connected: false,
+      scopes: ["channel:read:redemptions"],
+      redirectUri: "http://localhost:3030/auth/twitch/callback",
+    }),
+    startAuthorization: () => "https://id.twitch.tv/oauth2/authorize?client_id=client-id",
+    completeAuthorization: async () => ({
+      connected: true,
+    }),
+    disconnect: () => ({
+      connected: false,
+    }),
+    ...overrides,
+  };
 }
 
 function createMockResponse() {
@@ -85,6 +134,9 @@ test("POST /api/queue/test requires auth", async () => {
     rootDir: process.cwd(),
     auth: new AuthManager(config),
     state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
     broadcaster: () => {},
   });
 
@@ -104,6 +156,9 @@ test("POST /api/queue/test enqueues a generated redeem when authenticated", asyn
     rootDir: process.cwd(),
     auth,
     state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
     broadcaster: () => {},
   });
 
@@ -139,6 +194,9 @@ test("POST /api/wheel-config persists physics slider settings when authenticated
     rootDir: process.cwd(),
     auth,
     state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
     broadcaster: () => {},
   });
 
@@ -176,4 +234,183 @@ test("POST /api/wheel-config persists physics slider settings when authenticated
   assert.equal(body.physics.wheelMass, 1.6);
   assert.equal(body.timings.cruiseMs, 4500);
   assert(body.spinDurationMs > 4500);
+});
+
+test("GET /api/game-db/search requires auth", async () => {
+  const { state, config } = createState();
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth: new AuthManager(config),
+    state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
+    broadcaster: () => {},
+  });
+
+  const response = await runRoute(route, {
+    method: "GET",
+    url: "/api/game-db/search?q=halo",
+  });
+
+  assert.equal(response.statusCode, 401);
+});
+
+test("GET /api/game-db/search returns suggestions when authenticated", async () => {
+  const { state, config } = createState();
+  const auth = new AuthManager(config);
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth,
+    state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
+    broadcaster: () => {},
+  });
+
+  const login = await runRoute(route, {
+    method: "POST",
+    url: "/api/login",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: { secret: "test-secret" },
+  });
+  const cookie = login.headers["Set-Cookie"] || login.headers["set-cookie"];
+
+  const response = await runRoute(route, {
+    method: "GET",
+    url: "/api/game-db/search?q=halo",
+    headers: {
+      cookie,
+    },
+  });
+
+  const body = JSON.parse(response.body);
+  assert.equal(response.statusCode, 200);
+  assert.equal(body.provider, "igdb");
+  assert.equal(body.suggestions[0].title, "Matched halo");
+});
+
+test("POST /api/game-db/settings persists IGDB credentials when authenticated", async () => {
+  const { state, config } = createState();
+  const auth = new AuthManager(config);
+  const gameDatabase = {
+    publicSettings: () => ({
+      enabled: true,
+      configured: true,
+      provider: "igdb",
+      maxResults: 8,
+      igdb: { clientId: "saved-client", clientSecret: "saved-secret", imageSize: "cover_big_2x" },
+    }),
+    updateSettings: (body) => ({
+      enabled: body.enabled,
+      configured: true,
+      provider: "igdb",
+      maxResults: body.maxResults,
+      igdb: { clientId: body.igdb.clientId, clientSecret: body.igdb.clientSecret, imageSize: "cover_big_2x" },
+    }),
+    searchGames: createGameDatabaseStub().searchGames,
+  };
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth,
+    state,
+    gameDatabase,
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({
+      ...state.controllerSnapshot(),
+      gameDatabase: gameDatabase.publicSettings(),
+      twitch: createTwitchAuthStub().getPublicState(),
+    }),
+    broadcaster: () => {},
+  });
+
+  const login = await runRoute(route, {
+    method: "POST",
+    url: "/api/login",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: { secret: "test-secret" },
+  });
+  const cookie = login.headers["Set-Cookie"] || login.headers["set-cookie"];
+
+  const response = await runRoute(route, {
+    method: "POST",
+    url: "/api/game-db/settings",
+    headers: {
+      "content-type": "application/json",
+      cookie,
+    },
+    body: {
+      enabled: true,
+      maxResults: 10,
+      igdb: {
+        clientId: "saved-client",
+        clientSecret: "saved-secret",
+      },
+    },
+  });
+
+  const body = JSON.parse(response.body);
+  assert.equal(response.statusCode, 200);
+  assert.equal(body.configured, true);
+  assert.equal(body.igdb.clientId, "saved-client");
+  assert.equal(body.maxResults, 10);
+});
+
+test("GET /auth/twitch/start redirects to Twitch authorize when authenticated", async () => {
+  const { state, config } = createState();
+  const auth = new AuthManager(config);
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth,
+    state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
+    broadcaster: () => {},
+  });
+
+  const login = await runRoute(route, {
+    method: "POST",
+    url: "/api/login",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: { secret: "test-secret" },
+  });
+  const cookie = login.headers["Set-Cookie"] || login.headers["set-cookie"];
+
+  const response = await runRoute(route, {
+    method: "GET",
+    url: "/auth/twitch/start",
+    headers: { cookie },
+  });
+
+  assert.equal(response.statusCode, 302);
+  assert.match(response.headers.Location || response.headers.location, /^https:\/\/id\.twitch\.tv\/oauth2\/authorize/);
+});
+
+test("GET /auth/twitch/callback redirects back to controller on success", async () => {
+  const { state, config } = createState();
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth: new AuthManager(config),
+    state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
+    broadcaster: () => {},
+  });
+
+  const response = await runRoute(route, {
+    method: "GET",
+    url: "/auth/twitch/callback?code=test-code&state=test-state",
+  });
+
+  assert.equal(response.statusCode, 302);
+  assert.equal(response.headers.Location || response.headers.location, "/controller?twitch=connected");
 });

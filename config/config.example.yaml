@@ -3,6 +3,29 @@ server:
   port: 3030
 auth:
   sharedSecret: "change-me"
+twitch:
+  enabled: false
+  broadcasterLogin: ""
+  scopes: "channel:read:redemptions"
+  app:
+    clientId: ""
+    clientSecret: ""
+    redirectUri: "http://localhost:3030/auth/twitch/callback"
+  eventSub:
+    transport: "websocket"
+    reconnectGraceMs: 30000
+    subscriptions:
+      channelPointsCustomRewardRedemptionAdd: true
+      channelPointsCustomRewardRedemptionUpdate: false
+      channelPointsAutomaticRewardRedemptionAddV2: false
+gameDatabase:
+  enabled: false
+  provider: "igdb"
+  maxResults: 8
+  igdb:
+    clientId: ""
+    clientSecret: ""
+    imageSize: "cover_big_2x"
 wheel:
   countdownSeconds: 10
   overlayTitle: "The Docket"
@@ -32,6 +55,6 @@ assets:
   eliminateSound: ""
   nextGameSound: ""
 rewards:
-  restore: "Restore"
-  eliminate: "Eliminate"
+  restore: "Docket Restoration"
+  eliminate: "Docket Elimination!"
   addWeight: "Add Weight"

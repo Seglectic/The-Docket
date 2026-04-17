@@ -6,11 +6,27 @@ const { FileStore } = require("./storage");
 const { DocketState } = require("./state");
 const { AuthManager } = require("./auth");
 const { createRouter } = require("./router");
+const { GameDatabaseService } = require("./game-db");
+const { TwitchAuthService } = require("./twitch-auth");
+const { TwitchEventSubService } = require("./twitch-eventsub");
 
 const config = loadConfig();
 const store = new FileStore(config);
 const state = new DocketState(store, config);
 const auth = new AuthManager(config);
+const gameDatabase = new GameDatabaseService(config, store);
+const twitchAuth = new TwitchAuthService(config, store);
+const twitchEventSub = new TwitchEventSubService(config, twitchAuth, state, {
+  onStateChange: broadcastState,
+  onRedemption: (payload) => {
+    if (state.hasQueueItemForRedemption(payload.sourceMetadata?.redemptionId)) {
+      return null;
+    }
+    const item = state.addQueueItem(payload);
+    broadcastState();
+    return item;
+  },
+});
 
 state.bootstrap();
 
@@ -41,14 +57,20 @@ function getConnectionSummary() {
 }
 
 function broadcastState() {
+  const adminState = {
+    ...state.controllerSnapshot(),
+    connections: getConnectionSummary(),
+    gameDatabase: gameDatabase.publicSettings(),
+    twitch: {
+      ...twitchAuth.getPublicState(),
+      eventSub: twitchEventSub.getPublicState(),
+    },
+  };
   const payload = JSON.stringify({
     type: "state",
     payload: {
       public: state.publicSnapshot(),
-      admin: {
-        ...state.controllerSnapshot(),
-        connections: getConnectionSummary(),
-      },
+      admin: adminState,
     },
   });
   for (const client of wss.clients) {
@@ -62,6 +84,18 @@ const route = createRouter({
   rootDir: ROOT,
   auth,
   state,
+  gameDatabase,
+  twitchAuth,
+  twitchEventSub,
+  buildAdminState: () => ({
+    ...state.controllerSnapshot(),
+    connections: getConnectionSummary(),
+    gameDatabase: gameDatabase.publicSettings(),
+    twitch: {
+      ...twitchAuth.getPublicState(),
+      eventSub: twitchEventSub.getPublicState(),
+    },
+  }),
   broadcaster: broadcastState,
 });
 
@@ -88,6 +122,11 @@ wss.on("connection", (ws) => {
         admin: {
           ...state.controllerSnapshot(),
           connections: getConnectionSummary(),
+          gameDatabase: gameDatabase.publicSettings(),
+          twitch: {
+            ...twitchAuth.getPublicState(),
+            eventSub: twitchEventSub.getPublicState(),
+          },
         },
       },
     }),
@@ -114,4 +153,7 @@ server.listen(port, host, () => {
   console.log(`Controller: ${controllerUrl}`);
   console.log(`Overlay: ${overlayUrl}`);
   console.log(`Public: ${publicUrl}`);
+  twitchEventSub.start().catch((error) => {
+    console.error(`Twitch EventSub failed to start: ${error.message}`);
+  });
 });

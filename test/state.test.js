@@ -40,6 +40,9 @@ test("storage initializes missing files", () => {
   const files = fs.readdirSync(tempRoot);
   assert(files.includes("games.json"));
   assert(files.includes("wheel-config.json"));
+  assert(files.includes("game-db-cache.json"));
+  assert(files.includes("game-db-settings.json"));
+  assert(files.includes("twitch-auth.json"));
   assert(files.includes("queue.json"));
   assert(files.includes("events.jsonl"));
 });
@@ -172,4 +175,22 @@ test("wheel config updates persist physics sliders and recompute derived timings
   assert.equal(updated.timings.revealDelayMs, 1400);
   assert(updated.spinDurationMs > 5000);
   assert.equal(state.getWheelConfig().physics.drag, 0.15);
+});
+
+test("upsertGame persists metadata fields for auto-matched titles", () => {
+  const { state } = setup();
+  const game = state.upsertGame({
+    title: "Halo Infinite",
+    cover: "https://images.example/halo.jpg",
+    status: "in",
+    baseWeight: 1,
+    metadataSource: "igdb",
+    metadataId: "119171",
+    metadataSlug: "halo-infinite",
+    releaseYear: 2021,
+  });
+
+  assert.equal(game.metadataSource, "igdb");
+  assert.equal(game.metadataId, "119171");
+  assert.equal(game.releaseYear, 2021);
 });

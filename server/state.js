@@ -191,6 +191,13 @@ class DocketState {
     return item;
   }
 
+  hasQueueItemForRedemption(redemptionId) {
+    if (!redemptionId) {
+      return false;
+    }
+    return this.getQueue().some((entry) => entry.sourceMetadata?.redemptionId === redemptionId);
+  }
+
   cancelQueueItem(id) {
     const queue = this.getQueue();
     const item = queue.find((entry) => entry.id === id);
@@ -225,6 +232,10 @@ class DocketState {
         baseWeight: Number(input.baseWeight || 1),
         sortOrder: Number(input.sortOrder || existing.sortOrder || games.length + 1),
         locked: Boolean(input.locked),
+        metadataSource: input.metadataSource || "",
+        metadataId: input.metadataId || "",
+        metadataSlug: input.metadataSlug || "",
+        releaseYear: Number(input.releaseYear || 0) || null,
       });
       this.setGames(games);
       this.record("game.updated", { id: existing.id });
@@ -238,6 +249,10 @@ class DocketState {
       baseWeight: Number(input.baseWeight || 1),
       sortOrder: Number(input.sortOrder || games.length + 1),
       locked: Boolean(input.locked),
+      metadataSource: input.metadataSource || "",
+      metadataId: input.metadataId || "",
+      metadataSlug: input.metadataSlug || "",
+      releaseYear: Number(input.releaseYear || 0) || null,
     };
     games.push(game);
     this.setGames(games);

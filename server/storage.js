@@ -10,6 +10,9 @@ const FILES = {
   games: "games.json",
   specialEntries: "special-entries.json",
   wheelConfig: "wheel-config.json",
+  gameDbCache: "game-db-cache.json",
+  gameDbSettings: "game-db-settings.json",
+  twitchAuth: "twitch-auth.json",
   queue: "queue.json",
   spins: "spins.json",
   session: "session.json",
@@ -47,6 +50,9 @@ class FileStore {
       games: this.readSeedGames(),
       specialEntries: this.applyConfigToSpecialEntries(DEFAULT_SPECIAL_ENTRIES),
       wheelConfig: this.defaultWheelConfig(),
+      gameDbCache: { provider: null, entries: {} },
+      gameDbSettings: this.defaultGameDbSettings(),
+      twitchAuth: { connected: false },
       queue: [],
       spins: [],
       session: { activeSpinId: null },
@@ -79,6 +85,19 @@ class FileStore {
       timings: derived.timings,
       spinDurationMs: derived.spinDurationMs,
       revealDurationMs: derived.revealDurationMs,
+    };
+  }
+
+  defaultGameDbSettings() {
+    return {
+      enabled: this.config.gameDatabase?.enabled !== false,
+      provider: this.config.gameDatabase?.provider || "igdb",
+      maxResults: Number(this.config.gameDatabase?.maxResults || 8),
+      igdb: {
+        clientId: this.config.gameDatabase?.igdb?.clientId || "",
+        clientSecret: this.config.gameDatabase?.igdb?.clientSecret || "",
+        imageSize: this.config.gameDatabase?.igdb?.imageSize || "cover_big_2x",
+      },
     };
   }
 

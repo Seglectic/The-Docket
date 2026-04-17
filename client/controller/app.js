@@ -1,6 +1,12 @@
 const state = {
   admin: null,
   socket: null,
+  gameLookup: {
+    controller: null,
+    selectedSuggestion: null,
+    suggestions: [],
+    lastQuery: "",
+  },
 };
 
 const els = {
@@ -17,7 +23,26 @@ const els = {
   forceResolveButton: document.getElementById("force-resolve-button"),
   refreshButton: document.getElementById("refresh-button"),
   logoutButton: document.getElementById("logout-button"),
+  twitchStatus: document.getElementById("twitch-status"),
+  connectTwitchButton: document.getElementById("connect-twitch-button"),
+  disconnectTwitchButton: document.getElementById("disconnect-twitch-button"),
   gameForm: document.getElementById("game-form"),
+  gameId: document.getElementById("game-id"),
+  gameTitle: document.getElementById("game-title"),
+  gameCover: document.getElementById("game-cover"),
+  gameSource: document.getElementById("game-source"),
+  gameSourceId: document.getElementById("game-source-id"),
+  gameSourceSlug: document.getElementById("game-source-slug"),
+  gameReleaseYear: document.getElementById("game-release-year"),
+  gameSearchResults: document.getElementById("game-search-results"),
+  gameSearchStatus: document.getElementById("game-search-status"),
+  gameCoverPreview: document.getElementById("game-cover-preview"),
+  gameDbForm: document.getElementById("game-db-form"),
+  gameDbEnabled: document.getElementById("game-db-enabled"),
+  gameDbClientId: document.getElementById("game-db-client-id"),
+  gameDbClientSecret: document.getElementById("game-db-client-secret"),
+  gameDbMaxResults: document.getElementById("game-db-max-results"),
+  gameDbStatus: document.getElementById("game-db-status"),
   gamesList: document.getElementById("games-list"),
   weightForm: document.getElementById("weight-form"),
   weightTarget: document.getElementById("weight-target"),
@@ -152,15 +177,20 @@ function renderGames() {
     .map(
       (game) => `
         <div class="game-row">
+          <div class="game-row__media">
+            <div class="game-thumb" style="${game.cover ? `background-image:url('${encodeURI(game.cover)}')` : ""}"></div>
+          </div>
+          <div class="game-row__body">
           <header>
             <strong>${escapeHtml(game.title)}</strong>
             <span>${escapeHtml(game.status)}</span>
           </header>
-          <div class="muted">Weight: ${game.baseWeight} | Locked: ${game.locked ? "yes" : "no"}</div>
+          <div class="muted">Weight: ${game.baseWeight} | Locked: ${game.locked ? "yes" : "no"}${game.releaseYear ? ` | ${game.releaseYear}` : ""}</div>
           <div class="inline-actions">
             <button class="secondary" data-edit="${game.id}">Edit</button>
             <button class="secondary" data-toggle="${game.id}">${game.status === "in" ? "Move Out" : "Move In"}</button>
             <button class="danger" data-delete="${game.id}">Delete</button>
+          </div>
           </div>
         </div>
       `,
@@ -173,11 +203,27 @@ function renderGames() {
       if (!game) {
         return;
       }
-      document.getElementById("game-id").value = game.id;
-      document.getElementById("game-title").value = game.title;
-      document.getElementById("game-cover").value = game.cover || "";
+      els.gameId.value = game.id;
+      els.gameTitle.value = game.title;
+      els.gameCover.value = game.cover || "";
+      els.gameSource.value = game.metadataSource || "";
+      els.gameSourceId.value = game.metadataId || "";
+      els.gameSourceSlug.value = game.metadataSlug || "";
+      els.gameReleaseYear.value = game.releaseYear || "";
       document.getElementById("game-status").value = game.status;
       document.getElementById("game-weight").value = game.baseWeight;
+      updateCoverPreview(els.gameCover.value);
+      clearGameSearchResults();
+      state.gameLookup.selectedSuggestion = game.metadataId
+        ? {
+            id: game.metadataId,
+            title: game.title,
+            cover: game.cover || "",
+            source: game.metadataSource || "",
+            slug: game.metadataSlug || "",
+            releaseYear: game.releaseYear || null,
+          }
+        : null;
     });
   });
 
@@ -204,6 +250,58 @@ function renderGames() {
       loadAdminState();
     });
   });
+}
+
+function renderGameDatabaseSettings() {
+  const settings = state.admin.gameDatabase;
+  if (!settings) {
+    return;
+  }
+  els.gameDbEnabled.checked = Boolean(settings.enabled);
+  els.gameDbClientId.value = settings.igdb?.clientId || "";
+  els.gameDbClientSecret.value = settings.igdb?.clientSecret || "";
+  els.gameDbMaxResults.value = Number(settings.maxResults || 8);
+  if (settings.configured && settings.credentialSource === "twitchApp") {
+    els.gameDbStatus.textContent = `${settings.enabled ? "Enabled" : "Disabled"} • Using Twitch app credentials from config.yaml`;
+  } else if (settings.configured) {
+    els.gameDbStatus.textContent = `Configured • ${settings.enabled ? "Autocomplete enabled" : "Autocomplete disabled"}`;
+  } else {
+    els.gameDbStatus.textContent = "Using Twitch app creds is supported. Paste overrides here only if you want different IGDB credentials.";
+  }
+}
+
+function renderTwitch() {
+  const twitch = state.admin.twitch || {};
+  const connected = Boolean(twitch.connected);
+  const configured = Boolean(twitch.configured);
+  const scopeText = Array.isArray(twitch.scopes) && twitch.scopes.length ? twitch.scopes.join(", ") : "none";
+  const eventSub = twitch.eventSub || {};
+
+  if (!configured) {
+    els.twitchStatus.innerHTML = `
+      <strong>Twitch</strong>
+      <div class="muted">Not configured. Add your Twitch app credentials in config first.</div>
+      <div class="muted">Redirect: ${escapeHtml(twitch.redirectUri || "http://localhost:3030/auth/twitch/callback")}</div>
+    `;
+  } else if (!connected) {
+    els.twitchStatus.innerHTML = `
+      <strong>Twitch</strong>
+      <div class="muted">Ready to connect the broadcaster account.</div>
+      <div class="muted">Scopes: ${escapeHtml(scopeText)}</div>
+    `;
+  } else {
+    els.twitchStatus.innerHTML = `
+      <strong>Twitch Connected</strong>
+      <div class="muted">${escapeHtml(twitch.displayName || twitch.broadcasterLogin || "Unknown user")} • ${escapeHtml(twitch.broadcasterLogin || "")}</div>
+      <div class="muted">Scopes: ${escapeHtml(scopeText)}</div>
+      <div class="muted">Token expires: ${twitch.tokenExpiresAt ? new Date(twitch.tokenExpiresAt).toLocaleString() : "unknown"}</div>
+      <div class="muted">EventSub: ${escapeHtml(eventSub.status || "idle")}${eventSub.lastReward ? ` • Last reward: ${escapeHtml(eventSub.lastReward)}` : ""}</div>
+      ${eventSub.lastError ? `<div class="error">${escapeHtml(eventSub.lastError)}</div>` : ""}
+    `;
+  }
+
+  els.connectTwitchButton.disabled = !configured;
+  els.disconnectTwitchButton.disabled = !connected;
 }
 
 function renderWheelFeel() {
@@ -252,7 +350,10 @@ function render() {
   renderQueue();
   renderSpin();
   renderGames();
+  renderGameDatabaseSettings();
   renderWheelFeel();
+  renderTwitch();
+  updateCoverPreview(els.gameCover.value);
 }
 
 function renderConnections() {
@@ -261,8 +362,124 @@ function renderConnections() {
     els.instanceLine.textContent = "Instances: --";
     return;
   }
+  const visibleControllerCount = Math.max(0, connections.controller - 1);
+  const visibleTotal = Math.max(0, connections.total - 1);
   els.instanceLine.textContent =
-    `Instances: ${connections.total} total • C ${connections.controller} • O ${connections.overlay} • P ${connections.public}`;
+    `Instances: ${visibleTotal} total • C ${visibleControllerCount} • O ${connections.overlay} • P ${connections.public}`;
+}
+
+function renderGameSearchResults(suggestions) {
+  state.gameLookup.suggestions = suggestions;
+  if (!suggestions.length) {
+    clearGameSearchResults();
+    return;
+  }
+  els.gameSearchResults.innerHTML = suggestions
+    .map(
+      (item, index) => `
+        <button class="search-result" type="button" data-suggestion-index="${index}">
+          <span class="search-result__cover" style="${item.coverThumb ? `background-image:url('${encodeURI(item.coverThumb)}')` : ""}"></span>
+          <span class="search-result__body">
+            <strong>${escapeHtml(item.title)}</strong>
+            <span class="muted">${item.releaseYear || "Year unknown"} • ${escapeHtml(item.source.toUpperCase())}</span>
+          </span>
+        </button>
+      `,
+    )
+    .join("");
+  els.gameSearchResults.classList.remove("hidden");
+  els.gameSearchResults.querySelectorAll("[data-suggestion-index]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const suggestion = state.gameLookup.suggestions[Number(button.dataset.suggestionIndex)];
+      if (suggestion) {
+        applyGameSuggestion(suggestion);
+      }
+    });
+  });
+}
+
+function clearGameSearchResults() {
+  state.gameLookup.suggestions = [];
+  els.gameSearchResults.innerHTML = "";
+  els.gameSearchResults.classList.add("hidden");
+}
+
+function applyGameSuggestion(suggestion) {
+  state.gameLookup.selectedSuggestion = suggestion;
+  els.gameTitle.value = suggestion.title || "";
+  els.gameCover.value = suggestion.cover || "";
+  els.gameSource.value = suggestion.source || "";
+  els.gameSourceId.value = suggestion.id || "";
+  els.gameSourceSlug.value = suggestion.slug || "";
+  els.gameReleaseYear.value = suggestion.releaseYear || "";
+  els.gameSearchStatus.textContent = `Selected ${suggestion.title}${suggestion.releaseYear ? ` (${suggestion.releaseYear})` : ""} from IGDB.`;
+  updateCoverPreview(els.gameCover.value);
+  clearGameSearchResults();
+}
+
+async function searchGames(query) {
+  const trimmed = query.trim();
+  state.gameLookup.lastQuery = trimmed;
+  if (trimmed.length < 2) {
+    clearGameSearchResults();
+    els.gameSearchStatus.textContent = "Search IGDB by title and pick a match to auto-fill the cover.";
+    return;
+  }
+
+  if (state.gameLookup.controller) {
+    state.gameLookup.controller.abort();
+  }
+
+  const controller = new AbortController();
+  state.gameLookup.controller = controller;
+  els.gameSearchStatus.textContent = `Searching for "${trimmed}"…`;
+
+  try {
+    const response = await fetch(`/api/game-db/search?q=${encodeURIComponent(trimmed)}`, {
+      signal: controller.signal,
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Game search failed");
+    }
+    if (state.gameLookup.lastQuery !== trimmed) {
+      return;
+    }
+    if (!data.enabled) {
+      clearGameSearchResults();
+      els.gameSearchStatus.textContent = data.message || "Game lookup is currently disabled.";
+      return;
+    }
+    renderGameSearchResults(data.suggestions || []);
+    els.gameSearchStatus.textContent = data.suggestions?.length
+      ? `Found ${data.suggestions.length} match${data.suggestions.length === 1 ? "" : "es"} from IGDB.`
+      : `No matches found for "${trimmed}".`;
+  } catch (error) {
+    if (error.name === "AbortError") {
+      return;
+    }
+    clearGameSearchResults();
+    els.gameSearchStatus.textContent = error.message;
+  }
+}
+
+function updateCoverPreview(coverUrl) {
+  const trimmed = String(coverUrl || "").trim();
+  if (!trimmed) {
+    els.gameCoverPreview.textContent = "No cover selected";
+    els.gameCoverPreview.style.backgroundImage = "";
+    return;
+  }
+  els.gameCoverPreview.textContent = "";
+  els.gameCoverPreview.style.backgroundImage = `url("${trimmed.replaceAll('"', '\\"')}")`;
+}
+
+function clearGameMetadataSelection() {
+  state.gameLookup.selectedSuggestion = null;
+  els.gameSource.value = "";
+  els.gameSourceId.value = "";
+  els.gameSourceSlug.value = "";
+  els.gameReleaseYear.value = "";
 }
 
 function escapeHtml(value) {
@@ -322,20 +539,55 @@ els.logoutButton.addEventListener("click", async () => {
   location.reload();
 });
 
+els.connectTwitchButton.addEventListener("click", () => {
+  window.location.href = "/auth/twitch/start";
+});
+
+els.disconnectTwitchButton.addEventListener("click", async () => {
+  await request("/api/twitch/disconnect", { method: "POST" });
+  els.statusLine.textContent = "Twitch disconnected";
+  loadAdminState();
+});
+
 els.gameForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   await request("/api/games", {
     method: "POST",
     body: JSON.stringify({
-      id: document.getElementById("game-id").value || undefined,
-      title: document.getElementById("game-title").value,
-      cover: document.getElementById("game-cover").value,
+      id: els.gameId.value || undefined,
+      title: els.gameTitle.value,
+      cover: els.gameCover.value,
       status: document.getElementById("game-status").value,
       baseWeight: Number(document.getElementById("game-weight").value),
+      metadataSource: els.gameSource.value,
+      metadataId: els.gameSourceId.value,
+      metadataSlug: els.gameSourceSlug.value,
+      releaseYear: els.gameReleaseYear.value,
     }),
   });
   els.gameForm.reset();
+  clearGameMetadataSelection();
+  clearGameSearchResults();
+  els.gameSearchStatus.textContent = "Search IGDB by title and pick a match to auto-fill the cover.";
+  updateCoverPreview("");
   loadAdminState();
+});
+
+els.gameDbForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await request("/api/game-db/settings", {
+    method: "POST",
+    body: JSON.stringify({
+      enabled: els.gameDbEnabled.checked,
+      maxResults: Number(els.gameDbMaxResults.value || 8),
+      igdb: {
+        clientId: els.gameDbClientId.value,
+        clientSecret: els.gameDbClientSecret.value,
+      },
+    }),
+  });
+  els.statusLine.textContent = "Game database settings saved";
+  await loadAdminState();
 });
 
 els.weightForm.addEventListener("submit", async (event) => {
@@ -396,6 +648,40 @@ els.wheelForm.addEventListener("submit", async (event) => {
   loadAdminState();
 });
 
+let gameSearchDebounce = null;
+
+els.gameTitle.addEventListener("input", () => {
+  if (!state.gameLookup.selectedSuggestion || els.gameTitle.value !== state.gameLookup.selectedSuggestion.title) {
+    clearGameMetadataSelection();
+  }
+  window.clearTimeout(gameSearchDebounce);
+  gameSearchDebounce = window.setTimeout(() => {
+    searchGames(els.gameTitle.value);
+  }, 160);
+});
+
+els.gameTitle.addEventListener("blur", () => {
+  window.setTimeout(() => {
+    if (!els.gameSearchResults.contains(document.activeElement)) {
+      clearGameSearchResults();
+    }
+  }, 120);
+});
+
+els.gameCover.addEventListener("input", () => {
+  updateCoverPreview(els.gameCover.value);
+});
+
 loadAdminState().then(connectSocket).catch(() => {
   els.statusLine.textContent = "Login required";
 });
+
+const params = new URLSearchParams(window.location.search);
+if (params.get("twitch") === "connected") {
+  els.statusLine.textContent = "Twitch connected";
+  history.replaceState({}, "", "/controller");
+}
+if (params.get("twitch_error")) {
+  els.statusLine.textContent = params.get("twitch_error");
+  history.replaceState({}, "", "/controller");
+}

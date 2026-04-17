@@ -8,7 +8,9 @@ const state = {
   data: null,
   socket: null,
   angle: 0,
+  wheelOpacity: 1,
   animatingSpinId: null,
+  animationVersion: 0,
 };
 
 function connect() {
@@ -37,18 +39,19 @@ async function bootstrap() {
 
 function syncAnimation() {
   const spin = state.data.activeSpin;
-  if (!spin || !spin.winner) {
+  if (!spin) {
+    state.animatingSpinId = null;
     return;
   }
-  if (spin.status === "spinning" && state.animatingSpinId !== spin.id) {
+  if (spin.status === "spinning" && spin.winner && state.animatingSpinId !== spin.id) {
     state.animatingSpinId = spin.id;
     animateToWinner(spin);
+    return;
   }
-  if (spin.status === "reveal") {
+  if ((spin.status === "reveal" || spin.status === "complete") && spin.winner) {
+    state.wheelOpacity = 1;
     showWinner(spin);
-  }
-  if (spin.status === "complete") {
-    showWinner(spin);
+    drawWheel(spin.entries);
   }
 }
 
@@ -68,29 +71,100 @@ function hideWinner() {
   resultCard.className = "result-card hidden";
 }
 
-function animateToWinner(spin) {
-  const entries = spin.entries;
-  const winnerIndex = entries.findIndex((entry) => entry.entryId === spin.winner.entryId);
-  const sliceAngle = (Math.PI * 2) / Math.max(1, entries.length);
-  const target = Math.PI * 8 + (Math.PI * 1.5 - (winnerIndex + 0.5) * sliceAngle);
-  const start = performance.now();
-  const startAngle = state.angle;
-  const duration = 6000;
-  hideWinner();
+function easeOutCubic(value) {
+  return 1 - Math.pow(1 - value, 3);
+}
 
-  function frame(ts) {
-    const progress = Math.min(1, (ts - start) / duration);
-    const eased = 1 - Math.pow(1 - progress, 3);
-    state.angle = startAngle + (target - startAngle) * eased;
-    drawWheel();
-    if (progress < 1) {
-      requestAnimationFrame(frame);
-    } else {
-      showWinner(spin);
+function easeInOutSine(value) {
+  return -(Math.cos(Math.PI * value) - 1) / 2;
+}
+
+function animate(duration, onFrame) {
+  return new Promise((resolve) => {
+    const startedAt = performance.now();
+
+    function frame(timestamp) {
+      const progress = Math.min(1, (timestamp - startedAt) / duration);
+      onFrame(progress);
+      if (progress < 1) {
+        requestAnimationFrame(frame);
+      } else {
+        resolve();
+      }
     }
+
+    requestAnimationFrame(frame);
+  });
+}
+
+async function animateToWinner(spin) {
+  const animationVersion = ++state.animationVersion;
+  const entries = spin.entries || [];
+  const winnerIndex = entries.findIndex((entry) => entry.entryId === spin.winner.entryId);
+  if (winnerIndex === -1 || !entries.length) {
+    return;
   }
 
-  requestAnimationFrame(frame);
+  hideWinner();
+  state.wheelOpacity = 0;
+  drawWheel(entries);
+
+  const sliceAngle = (Math.PI * 2) / entries.length;
+  const pointerAngle = -Math.PI / 2;
+  const backwardDuration = 2000 + Math.random() * 1000;
+  const forwardDuration = 3200 + Math.random() * 700;
+  const startAngle = state.angle;
+  const backwardTurns = 0.6 + Math.random() * 0.5;
+  const backwardTarget = startAngle - Math.PI * 2 * backwardTurns;
+
+  await animate(450, (progress) => {
+    if (animationVersion !== state.animationVersion) {
+      return;
+    }
+    state.wheelOpacity = easeOutCubic(progress);
+    drawWheel(entries);
+  });
+
+  await animate(backwardDuration, (progress) => {
+    if (animationVersion !== state.animationVersion) {
+      return;
+    }
+    state.angle = startAngle + (backwardTarget - startAngle) * easeInOutSine(progress);
+    drawWheel(entries);
+  });
+
+  const landedSliceCenter = (winnerIndex + 0.5) * sliceAngle;
+  const normalizedCurrent = normalizeAngle(state.angle);
+  const normalizedTarget = normalizeAngle(pointerAngle - landedSliceCenter);
+  let delta = normalizedTarget - normalizedCurrent;
+  if (delta < 0) {
+    delta += Math.PI * 2;
+  }
+  const forwardTurns = 5 + Math.floor(Math.random() * 3);
+  const finalTarget = state.angle + delta + forwardTurns * Math.PI * 2;
+  const fastStartAngle = state.angle;
+
+  await animate(forwardDuration, (progress) => {
+    if (animationVersion !== state.animationVersion) {
+      return;
+    }
+    state.angle = fastStartAngle + (finalTarget - fastStartAngle) * easeOutCubic(progress);
+    drawWheel(entries);
+  });
+
+  if (animationVersion !== state.animationVersion) {
+    return;
+  }
+
+  state.angle = finalTarget;
+  state.wheelOpacity = 1;
+  drawWheel(entries);
+  showWinner(spin);
+}
+
+function normalizeAngle(angle) {
+  const circle = Math.PI * 2;
+  return ((angle % circle) + circle) % circle;
 }
 
 function render() {
@@ -99,6 +173,7 @@ function render() {
   if (!active) {
     viewerLine.textContent = "Waiting for the next spin";
     hideWinner();
+    state.wheelOpacity = 1;
     drawWheel([]);
     return;
   }
@@ -118,6 +193,7 @@ function drawWheel(entries = state.data?.activeSpin?.entries || []) {
   const radius = 450;
 
   ctx.save();
+  ctx.globalAlpha = state.wheelOpacity;
   ctx.translate(centerX, centerY);
   ctx.rotate(state.angle);
 
@@ -131,6 +207,7 @@ function drawWheel(entries = state.data?.activeSpin?.entries || []) {
     ctx.textAlign = "center";
     ctx.fillText("The Docket", 0, 12);
     ctx.restore();
+    drawPointer(centerX);
     return;
   }
 
@@ -158,14 +235,22 @@ function drawWheel(entries = state.data?.activeSpin?.entries || []) {
   });
 
   ctx.restore();
+  drawPointer(centerX);
+}
 
+function drawPointer(centerX) {
+  ctx.save();
   ctx.fillStyle = "#f7d774";
+  ctx.strokeStyle = "rgba(54, 34, 7, 0.75)";
+  ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.moveTo(centerX, 60);
-  ctx.lineTo(centerX - 28, 120);
-  ctx.lineTo(centerX + 28, 120);
+  ctx.moveTo(centerX - 34, 60);
+  ctx.lineTo(centerX + 34, 60);
+  ctx.lineTo(centerX, 126);
   ctx.closePath();
   ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 }
 
 function colorForEntry(index, entry) {

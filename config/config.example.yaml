@@ -1,0 +1,32 @@
+server:
+  host: 0.0.0.0
+  port: 3030
+auth:
+  sharedSecret: "change-me"
+wheel:
+  countdownSeconds: 10
+  spinDurationMs: 6500
+  revealDurationMs: 5000
+  overlayTitle: "The Docket"
+specialEntries:
+  viewersChoice:
+    enabled: true
+    label: "Viewers Choice"
+    baseWeight: 2
+    wheelScope: "out"
+  lockItIn:
+    enabled: true
+    label: "Lock It In"
+    baseWeight: 2
+    wheelScope: "in"
+features:
+  manualMode: true
+  twitchEnabled: false
+assets:
+  restoreSound: ""
+  eliminateSound: ""
+  nextGameSound: ""
+rewards:
+  restore: "Restore"
+  eliminate: "Eliminate"
+  addWeight: "Add Weight"

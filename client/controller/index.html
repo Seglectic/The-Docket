@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Docket Controller</title>
+    <link rel="stylesheet" href="/client/controller/styles.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <section id="login-panel" class="card login-card">
+        <h1>The Docket</h1>
+        <p>Controller login</p>
+        <form id="login-form">
+          <input id="secret" type="password" placeholder="Shared secret" required />
+          <button type="submit">Enter Controller</button>
+        </form>
+        <p id="login-error" class="error"></p>
+      </section>
+
+      <section id="app" class="hidden">
+        <header class="topbar">
+          <div>
+            <h1>The Docket Controller</h1>
+            <p id="status-line">Connecting…</p>
+          </div>
+          <div class="actions">
+            <button id="refresh-button">Refresh</button>
+            <button id="logout-button">Logout</button>
+          </div>
+        </header>
+
+        <section class="grid">
+          <article class="card">
+            <h2>Games</h2>
+            <form id="game-form" class="stack">
+              <input id="game-id" type="hidden" />
+              <input id="game-title" placeholder="Game title" required />
+              <input id="game-cover" placeholder="Cover URL (optional)" />
+              <select id="game-status">
+                <option value="in">In</option>
+                <option value="out">Out</option>
+              </select>
+              <input id="game-weight" type="number" min="1" value="1" />
+              <button type="submit">Save Game</button>
+            </form>
+            <div id="games-list" class="stack games"></div>
+          </article>
+
+          <article class="card">
+            <h2>Queue</h2>
+            <form id="queue-form" class="stack">
+              <input id="viewer-name" placeholder="Viewer name" required />
+              <select id="action-type">
+                <option value="restore">Restore</option>
+                <option value="eliminate">Eliminate</option>
+              </select>
+              <input id="user-input" placeholder="Optional note / input" />
+              <button type="submit">Add Manual Redeem</button>
+            </form>
+            <div id="queue-list" class="stack"></div>
+          </article>
+
+          <article class="card">
+            <h2>Active Spin</h2>
+            <div id="active-spin" class="stack"></div>
+            <div class="stack">
+              <button id="next-game-button">Start Next Game Spin</button>
+              <button id="force-resolve-button">Force Advance</button>
+            </div>
+            <form id="weight-form" class="stack">
+              <input id="weight-viewer" placeholder="Viewer name" />
+              <select id="weight-target"></select>
+              <input id="weight-delta" type="number" min="1" value="1" />
+              <button type="submit">Add Weight To Active Spin</button>
+            </form>
+          </article>
+        </section>
+
+        <div class="test-trigger">
+          <div class="test-trigger__label">Fast Local Testing</div>
+          <button id="test-redeem-button" class="arcade-button" type="button">Test Redeem</button>
+          <div id="test-redeem-status" class="test-trigger__status">No test redeem queued yet.</div>
+        </div>
+      </section>
+    </main>
+    <script src="/client/controller/app.js" defer></script>
+  </body>
+</html>

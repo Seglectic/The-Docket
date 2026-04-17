@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Docket Overlay</title>
+    <link rel="stylesheet" href="/client/overlay/styles.css" />
+  </head>
+  <body>
+    <main class="overlay-shell">
+      <header class="banner">
+        <div id="stream-title">The Docket</div>
+        <div id="viewer-line">Waiting for the next spin</div>
+      </header>
+      <section class="stage">
+        <canvas id="wheel" width="1100" height="1100"></canvas>
+        <div id="result-card" class="result-card hidden"></div>
+      </section>
+    </main>
+    <script src="/client/overlay/app.js" defer></script>
+  </body>
+</html>

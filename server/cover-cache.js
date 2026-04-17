@@ -1,9 +1,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { COVER_CACHE_LIMIT_BYTES } = require("./storage");
 
 const DEFAULT_DIR = path.join("media", "covers");
 const ALLOWED_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+const MAX_SINGLE_COVER_BYTES = Math.min(8 * 1024 * 1024, Math.floor(COVER_CACHE_LIMIT_BYTES / 8));
 
 class CoverCacheService {
   constructor(store, options = {}) {
@@ -43,7 +45,11 @@ class CoverCacheService {
       const actualExtension = inferExtension(remoteUrl, contentType);
       const finalPath = actualExtension === extension ? filePath : path.join(this.mediaDir(), `${safeName(key || "cover")}-${hash(remoteUrl).slice(0, 12)}${actualExtension}`);
       const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length > MAX_SINGLE_COVER_BYTES) {
+        throw new Error(`Cover image exceeds ${Math.round(MAX_SINGLE_COVER_BYTES / (1024 * 1024))} MB limit`);
+      }
       fs.writeFileSync(finalPath, buffer);
+      this.store.pruneCoverCache();
       return {
         localUrl: `/media/covers/${path.basename(finalPath)}`,
         remoteUrl,

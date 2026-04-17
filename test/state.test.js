@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { DocketState } = require("../server/state");
-const { FileStore } = require("../server/storage");
+const { EVENT_RETENTION_MS, FileStore } = require("../server/storage");
 
 function createConfig(overrides = {}) {
   return {
@@ -20,7 +20,7 @@ function createConfig(overrides = {}) {
   };
 }
 
-function setup() {
+async function setup() {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "docket-test-"));
   const config = createConfig();
   const store = new FileStore(config);
@@ -31,12 +31,12 @@ function setup() {
     { id: "out-1", title: "Out 1", cover: "", status: "out", baseWeight: 1, sortOrder: 3, locked: false },
   ];
   const state = new DocketState(store, config, { random: () => 0 });
-  state.bootstrap();
+  await state.bootstrap();
   return { state, tempRoot };
 }
 
-test("storage initializes missing files", () => {
-  const { tempRoot } = setup();
+test("storage initializes missing files", async () => {
+  const { tempRoot } = await setup();
   const files = fs.readdirSync(tempRoot);
   assert(files.includes("games.json"));
   assert(files.includes("wheel-config.json"));
@@ -47,8 +47,8 @@ test("storage initializes missing files", () => {
   assert(files.includes("events.jsonl"));
 });
 
-test("queue insertion and cancel behavior works", () => {
-  const { state } = setup();
+test("queue insertion and cancel behavior works", async () => {
+  const { state } = await setup();
   const item = state.addQueueItem({ viewerName: "Alice", actionType: "restore" });
   assert.equal(item.status, "queued");
   const canceled = state.cancelQueueItem(item.id);
@@ -56,8 +56,8 @@ test("queue insertion and cancel behavior works", () => {
   assert.equal(state.getQueue().find((entry) => entry.id === item.id), undefined);
 });
 
-test("restore spins from out entries only", () => {
-  const { state } = setup();
+test("restore spins from out entries only", async () => {
+  const { state } = await setup();
   const item = state.addQueueItem({ viewerName: "Alice", actionType: "restore" });
   const spin = state.startQueueSpin(item.id);
   assert.equal(spin.type, "restore");
@@ -65,7 +65,7 @@ test("restore spins from out entries only", () => {
 });
 
 test("lock it in can win on the in wheel", async () => {
-  const { state } = setup();
+  const { state } = await setup();
   const item = state.addQueueItem({ viewerName: "Bob", actionType: "eliminate" });
   const spin = state.startQueueSpin(item.id);
   spin.winner = spin.entries.find((entry) => entry.entryId === "special-lock-it-in");
@@ -76,8 +76,8 @@ test("lock it in can win on the in wheel", async () => {
   assert(lockedGame);
 });
 
-test("completed queue items are removed after spin resolution", () => {
-  const { state } = setup();
+test("completed queue items are removed after spin resolution", async () => {
+  const { state } = await setup();
   const item = state.addQueueItem({ viewerName: "Alice", actionType: "restore" });
   const spin = state.startQueueSpin(item.id);
   spin.status = "reveal";
@@ -87,7 +87,7 @@ test("completed queue items are removed after spin resolution", () => {
 });
 
 test("countdown spin accepts weight before cutoff and resolves after cutoff", async () => {
-  const { state } = setup();
+  const { state } = await setup();
   const spin = state.startNextGameSpin();
   const targetId = spin.entries[0].entryId;
   state.addWeightToActiveSpin({ viewerName: "Cara", targetEntryId: targetId, weightDelta: 2 });
@@ -100,8 +100,8 @@ test("countdown spin accepts weight before cutoff and resolves after cutoff", as
   assert(resolved.winner);
 });
 
-test("active session survives restart and resolves overdue countdowns", () => {
-  const { state, tempRoot } = setup();
+test("active session survives restart and resolves overdue countdowns", async () => {
+  const { state, tempRoot } = await setup();
   const spin = state.startNextGameSpin();
   spin.countdownEndsAt = new Date(Date.now() - 100).toISOString();
   state.upsertSpin(spin);
@@ -111,12 +111,12 @@ test("active session survives restart and resolves overdue countdowns", () => {
   store.dataDir = tempRoot;
   store.readSeedGames = () => [];
   const recovered = new DocketState(store, config, { random: () => 0 });
-  recovered.bootstrap();
+  await recovered.bootstrap();
   assert.equal(recovered.getActiveSpin().status, "spinning");
 });
 
-test("overdue spinning session is completed during recovery", () => {
-  const { state, tempRoot } = setup();
+test("overdue spinning session is completed during recovery", async () => {
+  const { state, tempRoot } = await setup();
   const item = state.addQueueItem({ viewerName: "Alice", actionType: "restore" });
   const spin = state.startQueueSpin(item.id);
   spin.startedAt = new Date(Date.now() - 20_000).toISOString();
@@ -127,15 +127,15 @@ test("overdue spinning session is completed during recovery", () => {
   store.dataDir = tempRoot;
   store.readSeedGames = () => [];
   const recovered = new DocketState(store, config, { random: () => 0 });
-  recovered.bootstrap();
+  await recovered.bootstrap();
 
   assert.equal(recovered.getActiveSpin(), null);
   assert.equal(recovered.findSpin(spin.id).status, "complete");
   assert.equal(recovered.getQueue().find((entry) => entry.id === item.id), undefined);
 });
 
-test("bootstrap prunes completed and canceled queue items from persisted data", () => {
-  const { state, tempRoot } = setup();
+test("bootstrap prunes completed and canceled queue items from persisted data", async () => {
+  const { state, tempRoot } = await setup();
   state.setQueue([
     { id: "queued-1", status: "queued" },
     { id: "done-1", status: "completed" },
@@ -148,7 +148,7 @@ test("bootstrap prunes completed and canceled queue items from persisted data", 
   store.dataDir = tempRoot;
   store.readSeedGames = () => [];
   const recovered = new DocketState(store, config, { random: () => 0 });
-  recovered.bootstrap();
+  await recovered.bootstrap();
 
   assert.deepEqual(
     recovered.getQueue().map((entry) => entry.id),
@@ -156,8 +156,59 @@ test("bootstrap prunes completed and canceled queue items from persisted data", 
   );
 });
 
-test("wheel config updates persist physics sliders and recompute derived timings", () => {
-  const { state } = setup();
+test("bootstrap prunes event logs older than six months", async () => {
+  const { tempRoot } = await setup();
+  const oldAt = new Date(Date.now() - EVENT_RETENTION_MS - 1000).toISOString();
+  const freshAt = new Date().toISOString();
+  fs.writeFileSync(
+    path.join(tempRoot, "events.jsonl"),
+    `${JSON.stringify({ type: "old", at: oldAt })}\n${JSON.stringify({ type: "fresh", at: freshAt })}\n`,
+    "utf8",
+  );
+
+  const config = createConfig();
+  const store = new FileStore(config);
+  store.dataDir = tempRoot;
+  store.readSeedGames = () => [];
+  const recovered = new DocketState(store, config, { random: () => 0 });
+  await recovered.bootstrap();
+
+  const lines = fs
+    .readFileSync(path.join(tempRoot, "events.jsonl"), "utf8")
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].type, "fresh");
+});
+
+test("spin history is capped to recent entries", async () => {
+  const { state } = await setup();
+  const recentStart = new Date().toISOString();
+  const oldStart = new Date(Date.now() - EVENT_RETENTION_MS - 1000).toISOString();
+
+  state.setSpins([
+    { id: "spin-old", startedAt: oldStart, status: "complete" },
+    { id: "spin-new", startedAt: recentStart, status: "complete" },
+  ]);
+
+  assert.deepEqual(
+    state.getSpins().map((spin) => spin.id),
+    ["spin-new"],
+  );
+});
+
+test("controller snapshot includes storage summary", async () => {
+  const { state } = await setup();
+  const snapshot = state.controllerSnapshot();
+
+  assert.equal(typeof snapshot.storage.totalBytes, "number");
+  assert.equal(snapshot.storage.limitBytes > 0, true);
+});
+
+test("wheel config updates persist physics sliders and recompute derived timings", async () => {
+  const { state } = await setup();
   const updated = state.updateWheelConfig({
     physics: {
       wheelMass: 1.6,
@@ -177,8 +228,8 @@ test("wheel config updates persist physics sliders and recompute derived timings
   assert.equal(state.getWheelConfig().physics.drag, 0.15);
 });
 
-test("upsertGame persists metadata fields for auto-matched titles", () => {
-  const { state } = setup();
+test("upsertGame persists metadata fields for auto-matched titles", async () => {
+  const { state } = await setup();
   const game = state.upsertGame({
     title: "Halo Infinite",
     cover: "https://images.example/halo.jpg",

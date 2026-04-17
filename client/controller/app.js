@@ -16,6 +16,10 @@ const els = {
   loginError: document.getElementById("login-error"),
   statusLine: document.getElementById("status-line"),
   instanceLine: document.getElementById("instance-line"),
+  storageUsageLabel: document.getElementById("storage-usage-label"),
+  storageUsageDetail: document.getElementById("storage-usage-detail"),
+  storageBreakdown: document.getElementById("storage-breakdown"),
+  storageMeterFill: document.getElementById("storage-meter-fill"),
   queueForm: document.getElementById("queue-form"),
   queueList: document.getElementById("queue-list"),
   activeSpin: document.getElementById("active-spin"),
@@ -340,6 +344,20 @@ function formatMs(value) {
   return `${(Number(value) / 1000).toFixed(2)}s`;
 }
 
+function formatBytes(value) {
+  const bytes = Math.max(0, Number(value) || 0);
+  if (bytes >= 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  if (bytes >= 1024) {
+    return `${Math.round(bytes / 1024)} KB`;
+  }
+  return `${bytes} B`;
+}
+
 function render() {
   if (!state.admin) {
     return;
@@ -347,6 +365,7 @@ function render() {
   els.loginPanel.classList.add("hidden");
   els.app.classList.remove("hidden");
   renderConnections();
+  renderStorageUsage();
   renderQueue();
   renderSpin();
   renderGames();
@@ -366,6 +385,30 @@ function renderConnections() {
   const visibleTotal = Math.max(0, connections.total - 1);
   els.instanceLine.textContent =
     `Instances: ${visibleTotal} total • C ${visibleControllerCount} • O ${connections.overlay} • P ${connections.public}`;
+}
+
+function renderStorageUsage() {
+  const storage = state.admin.storage;
+  if (!storage) {
+    els.storageUsageLabel.textContent = "--";
+    els.storageUsageDetail.textContent = "Storage summary unavailable";
+    els.storageBreakdown.textContent = "";
+    els.storageMeterFill.style.height = "0%";
+    return;
+  }
+
+  const percent = Math.max(0, Math.min(100, Number(storage.percentUsed || 0)));
+  els.storageUsageLabel.textContent = `${formatBytes(storage.totalBytes)} / ${formatBytes(storage.limitBytes)}`;
+  els.storageUsageDetail.textContent = `${percent.toFixed(1)}% of the 1 GB controller budget`;
+  els.storageBreakdown.innerHTML = [
+    `Covers ${formatBytes(storage.breakdown?.coversBytes || 0)}`,
+    `Events ${formatBytes(storage.breakdown?.eventLogBytes || 0)}`,
+    `Spins ${formatBytes(storage.breakdown?.spinsBytes || 0)}`,
+    `Runtime ${formatBytes(storage.breakdown?.runtimeBytes || 0)}`,
+  ]
+    .map((line) => `<span>${escapeHtml(line)}</span>`)
+    .join("");
+  els.storageMeterFill.style.height = `${percent}%`;
 }
 
 function renderGameSearchResults(suggestions) {

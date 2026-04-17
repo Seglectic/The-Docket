@@ -27,12 +27,59 @@ cp config/config.example.yaml config/config.yaml
 npm start
 ```
 
+## Storage Modes
+
+The app can run with either local files or Postgres as its source of truth.
+
+- `storage.driver: "file"` keeps the current local-first behavior and writes runtime state into `data/`.
+- `storage.driver: "postgres"` stores runtime state in Postgres and is the intended mode for hosted deployments.
+- If `storage.driver` is omitted, the app falls back to Postgres automatically when `POSTGRES_URL` or `DATABASE_URL` is present. Otherwise it uses file storage.
+
+Example Postgres config:
+
+```yaml
+storage:
+  driver: "postgres"
+  postgres:
+    connectionString: ""
+    ssl: true
+```
+
+You can also leave `connectionString` blank and rely on `POSTGRES_URL` or `DATABASE_URL`. The app now accepts either automatically.
+
+## Google Cloud VM
+
+The current deployment target is a small always-on Google Cloud VM with an external Postgres database such as Neon. This fits the app better than serverless hosts because the app runs as a persistent Node server and uses WebSockets for live controller / overlay updates.
+
+Minimal VM env setup:
+
+```bash
+DOCKET_STORAGE_DRIVER=postgres
+DATABASE_URL=<from Neon>
+AUTH_SHARED_SECRET=<controller shared secret>
+HOST=0.0.0.0
+PORT=3030
+```
+
+Notes:
+
+- The app respects `HOST`, `PORT`, `DATABASE_URL`, and `AUTH_SHARED_SECRET` directly from the environment.
+- If `DATABASE_URL` is present, the app can use Postgres without needing a checked-in `config.yaml`.
+- `npm start` is the default runtime entrypoint for this project.
+- A reverse proxy such as Caddy can expose `/controller`, `/overlay`, and `/public` over HTTPS while the Node app listens on a local port.
+
 ## Notes
 
 - Runtime data is created in `data/` on first run.
 - The same app works locally on one machine or across a LAN.
 - OBS should use the `/overlay` URL as a browser source.
 - The controller uses a shared-secret login and stores a session cookie locally.
+- Storage is intentionally bounded for lightweight hosting targets:
+  - `data/events.jsonl` is pruned to roughly the last 6 months.
+  - `data/spins.json` keeps recent history only and drops older spin sessions.
+  - `data/media/covers/` is trimmed automatically with a 512 MB cache ceiling and a per-image size cap.
+  - The controller header shows total app storage usage against a 1 GB budget.
+- Remote game cover URLs are now stored as-is. The app no longer downloads and re-hosts cover art during normal game saves.
 
 ## Game Lookup
 
@@ -49,8 +96,9 @@ Runtime notes:
 
 - Search results are cached locally in `data/game-db-cache.json`.
 - Saved IGDB runtime settings are stored locally in `data/game-db-settings.json`.
-- Saved game covers are downloaded into `data/media/covers/` and served back from this app when available.
 - If IGDB is not configured, the add-game form still works manually.
+- Search cache writes are already bounded to the newest 150 queries.
+- In Postgres mode, the same game DB cache/settings live in the database instead of local files.
 
 ## Twitch EventSub
 

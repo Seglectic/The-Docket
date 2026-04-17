@@ -1,3 +1,5 @@
 node_modules/
 data/
 config/config.yaml
+.DS_Store
+client/.DS_Store

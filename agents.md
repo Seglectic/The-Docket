@@ -13,8 +13,11 @@ This project is a local-first stream tool for managing "The Docket" without Goog
 ## Technical Intent
 
 - Prefer a single local Node.js app over a distributed/cloud-first system.
+- Initial delivery should stay compatible with a small always-on VM plus managed Postgres, while preserving a clean path back to streamer-local hosting later.
 - Prefer plain JavaScript and avoid heavy frontend frameworks unless a later need clearly justifies them.
 - Keep persistence simple and inspectable with local files first.
+- Keep storage swappable between local files and hosted Postgres so the app can move between streamer-local hosting and lightweight hosted environments without rewriting core behavior.
+- Keep file-backed storage bounded and observable so request/storage-limited hosts cannot quietly bloat over time.
 - Keep the queue and spin resolution server-authoritative so overlay visuals never decide the real outcome.
 - Leave clean seams for future Twitch integration without making Twitch a requirement for local testing.
 

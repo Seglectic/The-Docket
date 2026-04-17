@@ -32,13 +32,13 @@ function createConfig() {
   };
 }
 
-function createState() {
+async function createState() {
   const config = createConfig();
   const store = new FileStore(config);
   store.dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "docket-router-"));
   store.readSeedGames = () => [];
   const state = new DocketState(store, config, { random: () => 0.1 });
-  state.bootstrap();
+  await state.bootstrap();
   return { state, config };
 }
 
@@ -77,17 +77,6 @@ function createTwitchAuthStub(overrides = {}) {
     }),
     disconnect: () => ({
       connected: false,
-    }),
-    ...overrides,
-  };
-}
-
-function createCoverCacheStub(overrides = {}) {
-  return {
-    cacheCover: async (url) => ({
-      localUrl: "/media/covers/cached-cover.jpg",
-      remoteUrl: url,
-      cached: true,
     }),
     ...overrides,
   };
@@ -140,7 +129,7 @@ async function runRoute(route, { method, url, headers = {}, body }) {
 }
 
 test("POST /api/queue/test requires auth", async () => {
-  const { state, config } = createState();
+  const { state, config } = await createState();
   const route = createRouter({
     rootDir: process.cwd(),
     auth: new AuthManager(config),
@@ -161,7 +150,7 @@ test("POST /api/queue/test requires auth", async () => {
 });
 
 test("POST /api/queue/test enqueues a generated redeem when authenticated", async () => {
-  const { state, config } = createState();
+  const { state, config } = await createState();
   const auth = new AuthManager(config);
   const route = createRouter({
     rootDir: process.cwd(),
@@ -199,7 +188,7 @@ test("POST /api/queue/test enqueues a generated redeem when authenticated", asyn
 });
 
 test("POST /api/wheel-config persists physics slider settings when authenticated", async () => {
-  const { state, config } = createState();
+  const { state, config } = await createState();
   const auth = new AuthManager(config);
   const route = createRouter({
     rootDir: process.cwd(),
@@ -248,7 +237,7 @@ test("POST /api/wheel-config persists physics slider settings when authenticated
 });
 
 test("GET /api/game-db/search requires auth", async () => {
-  const { state, config } = createState();
+  const { state, config } = await createState();
   const route = createRouter({
     rootDir: process.cwd(),
     auth: new AuthManager(config),
@@ -268,7 +257,7 @@ test("GET /api/game-db/search requires auth", async () => {
 });
 
 test("GET /api/game-db/search returns suggestions when authenticated", async () => {
-  const { state, config } = createState();
+  const { state, config } = await createState();
   const auth = new AuthManager(config);
   const route = createRouter({
     rootDir: process.cwd(),
@@ -305,7 +294,7 @@ test("GET /api/game-db/search returns suggestions when authenticated", async () 
 });
 
 test("POST /api/game-db/settings persists IGDB credentials when authenticated", async () => {
-  const { state, config } = createState();
+  const { state, config } = await createState();
   const auth = new AuthManager(config);
   const gameDatabase = {
     publicSettings: () => ({
@@ -373,7 +362,7 @@ test("POST /api/game-db/settings persists IGDB credentials when authenticated", 
 });
 
 test("GET /auth/twitch/start redirects to Twitch authorize when authenticated", async () => {
-  const { state, config } = createState();
+  const { state, config } = await createState();
   const auth = new AuthManager(config);
   const route = createRouter({
     rootDir: process.cwd(),
@@ -406,7 +395,7 @@ test("GET /auth/twitch/start redirects to Twitch authorize when authenticated", 
 });
 
 test("GET /auth/twitch/callback redirects back to controller on success", async () => {
-  const { state, config } = createState();
+  const { state, config } = await createState();
   const route = createRouter({
     rootDir: process.cwd(),
     auth: new AuthManager(config),
@@ -426,15 +415,14 @@ test("GET /auth/twitch/callback redirects back to controller on success", async 
   assert.equal(response.headers.Location || response.headers.location, "/controller?twitch=connected");
 });
 
-test("POST /api/games caches remote cover art locally when authenticated", async () => {
-  const { state, config } = createState();
+test("POST /api/games stores remote cover URLs as-is when authenticated", async () => {
+  const { state, config } = await createState();
   const auth = new AuthManager(config);
   const route = createRouter({
     rootDir: process.cwd(),
     auth,
     state,
     gameDatabase: createGameDatabaseStub(),
-    coverCache: createCoverCacheStub(),
     twitchAuth: createTwitchAuthStub(),
     buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
     broadcaster: () => {},
@@ -467,6 +455,6 @@ test("POST /api/games caches remote cover art locally when authenticated", async
 
   const body = JSON.parse(response.body);
   assert.equal(response.statusCode, 201);
-  assert.equal(body.cover, "/media/covers/cached-cover.jpg");
-  assert.equal(body.coverFallback, "https://images.example/halo.jpg");
+  assert.equal(body.cover, "https://images.example/halo.jpg");
+  assert.equal(body.coverFallback, "");
 });

@@ -25,6 +25,20 @@
             <p id="status-line">Connecting…</p>
             <p id="instance-line" class="muted">Instances: --</p>
           </div>
+          <section class="storage-card" aria-labelledby="storage-title">
+            <div class="storage-card__copy">
+              <p id="storage-title" class="eyebrow">App Storage</p>
+              <strong id="storage-usage-label">--</strong>
+              <p id="storage-usage-detail" class="muted">Controller data usage</p>
+              <div id="storage-breakdown" class="storage-breakdown muted"></div>
+            </div>
+            <div class="storage-meter" aria-hidden="true">
+              <div class="storage-meter__track">
+                <div id="storage-meter-fill" class="storage-meter__fill"></div>
+              </div>
+              <div class="storage-meter__cap">1 GB</div>
+            </div>
+          </section>
           <div class="actions">
             <button id="refresh-button">Refresh</button>
             <button id="logout-button">Logout</button>

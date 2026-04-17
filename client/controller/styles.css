@@ -54,11 +54,9 @@ body {
 }
 
 .topbar {
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px) auto;
   align-items: center;
   margin-bottom: 16px;
-  position: relative;
-  padding-right: 200px;
 }
 
 .grid {
@@ -81,9 +79,84 @@ body {
 .actions {
   display: flex;
   gap: 8px;
+  align-self: start;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--cyan);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.storage-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: stretch;
+  padding: 14px 16px;
+  border: 1px solid rgba(116, 215, 236, 0.18);
+  background:
+    linear-gradient(180deg, rgba(116, 215, 236, 0.08), rgba(255, 178, 92, 0.04)),
+    rgba(18, 19, 27, 0.92);
+  border-radius: 10px;
+  min-height: 148px;
+}
+
+.storage-card__copy {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.storage-card__copy strong {
+  font-size: 1.15rem;
+}
+
+.storage-breakdown {
+  display: grid;
+  gap: 4px;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.storage-meter {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.storage-meter__track {
+  position: relative;
+  width: 30px;
+  height: 108px;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 248, 242, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01)),
+    #111219;
+  overflow: hidden;
+}
+
+.storage-meter__fill {
   position: absolute;
-  top: 0;
+  left: 0;
   right: 0;
+  bottom: 0;
+  height: 0%;
+  background:
+    linear-gradient(180deg, #fff0a0 0%, #ffb25c 45%, #ff5555 100%);
+  box-shadow: 0 0 20px rgba(255, 178, 92, 0.22);
+  transition: height 180ms ease;
+}
+
+.storage-meter__cap {
+  color: var(--cyan);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 button,
@@ -388,10 +461,22 @@ button:active {
 
   .topbar {
     grid-template-columns: 1fr;
-    padding-right: 0;
   }
 
   .actions {
-    position: static;
+    width: 100%;
+  }
+
+  .storage-card {
+    min-height: 0;
+  }
+
+  .storage-meter {
+    grid-template-columns: auto auto;
+    align-items: center;
+  }
+
+  .storage-meter__track {
+    height: 92px;
   }
 }

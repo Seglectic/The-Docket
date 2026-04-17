@@ -10,8 +10,8 @@ class DocketState {
     this.sessions = new Map();
   }
 
-  bootstrap() {
-    this.store.ensure();
+  async bootstrap() {
+    await this.store.ensure();
     this.ensureWheelConfig();
     this.cleanupPersistedQueue();
     this.recoverActiveSpin();
@@ -53,6 +53,7 @@ class DocketState {
       ...state,
       rewards: this.config.rewards || {},
       assets: this.config.assets || {},
+      storage: this.store.getStorageSummary(),
     };
   }
 
@@ -142,7 +143,7 @@ class DocketState {
   }
 
   setSpins(spins) {
-    this.store.writeJson("spins", spins);
+    this.store.writeJson("spins", this.store.normalizeSpins(spins));
   }
 
   getSession() {

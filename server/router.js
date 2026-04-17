@@ -35,7 +35,6 @@ function createRouter({
   gameDatabase = { searchGames: async () => ({ enabled: false, configured: false, provider: "igdb", suggestions: [] }) },
   twitchAuth = { getPublicState: () => ({ configured: false, connected: false }), startAuthorization: () => "", completeAuthorization: async () => ({}), disconnect: () => ({ connected: false }) },
   twitchEventSub = { restart: async () => {}, stop: () => {} },
-  coverCache = { cacheCover: async (url) => ({ localUrl: url, remoteUrl: url, cached: false }) },
   buildAdminState = () => state.controllerSnapshot(),
 }) {
   return async function route(req, res) {
@@ -70,6 +69,10 @@ function createRouter({
         return;
       }
       if (pathname.startsWith("/media/covers/")) {
+        if (!state.store.dataDir) {
+          jsonResponse(res, 404, { error: "Not found" });
+          return;
+        }
         sendFile(res, path.join(state.store.dataDir, "media", "covers", path.basename(pathname)));
         return;
       }
@@ -119,6 +122,7 @@ function createRouter({
             code: url.searchParams.get("code") || "",
             state: url.searchParams.get("state") || "",
           });
+          await state.store.whenIdle();
           await twitchEventSub.restart();
           broadcaster();
           res.writeHead(302, { Location: "/controller?twitch=connected" });
@@ -134,6 +138,7 @@ function createRouter({
       if (pathname === "/api/twitch/disconnect" && req.method === "POST") {
         auth.requireAuth(req);
         const result = twitchAuth.disconnect();
+        await state.store.whenIdle();
         twitchEventSub.stop();
         broadcaster();
         jsonResponse(res, 200, result);
@@ -157,6 +162,7 @@ function createRouter({
         auth.requireAuth(req);
         const body = await readBody(req);
         const settings = gameDatabase.updateSettings(body);
+        await state.store.whenIdle();
         broadcaster();
         jsonResponse(res, 200, settings);
         return;
@@ -166,6 +172,7 @@ function createRouter({
         auth.requireAuth(req);
         const body = await readBody(req);
         const item = state.addQueueItem(body);
+        await state.store.whenIdle();
         broadcaster();
         jsonResponse(res, 201, item);
         return;
@@ -174,6 +181,7 @@ function createRouter({
       if (pathname === "/api/queue/test" && req.method === "POST") {
         auth.requireAuth(req);
         const item = state.addQueueItem(randomTestRedeem());
+        await state.store.whenIdle();
         broadcaster();
         jsonResponse(res, 201, item);
         return;
@@ -183,6 +191,7 @@ function createRouter({
         auth.requireAuth(req);
         const id = pathname.split("/")[3];
         const spin = state.startQueueSpin(id);
+        await state.store.whenIdle();
         broadcaster();
         jsonResponse(res, 200, spin);
         return;
@@ -192,6 +201,7 @@ function createRouter({
         auth.requireAuth(req);
         const id = pathname.split("/")[3];
         const item = state.cancelQueueItem(id);
+        await state.store.whenIdle();
         broadcaster();
         jsonResponse(res, 200, item);
         return;
@@ -200,6 +210,7 @@ function createRouter({
       if (pathname === "/api/spins/next-game" && req.method === "POST") {
         auth.requireAuth(req);
         const spin = state.startNextGameSpin();
+        await state.store.whenIdle();
         broadcaster();
         jsonResponse(res, 201, spin);
         return;
@@ -208,6 +219,7 @@ function createRouter({
       if (pathname === "/api/spins/force-resolve" && req.method === "POST") {
         auth.requireAuth(req);
         const spin = state.forceResolveActiveSpin();
+        await state.store.whenIdle();
         broadcaster();
         jsonResponse(res, 200, spin);
         return;
@@ -217,6 +229,7 @@ function createRouter({
         auth.requireAuth(req);
         const body = await readBody(req);
         const spin = state.addWeightToActiveSpin(body);
+        await state.store.whenIdle();
         broadcaster();
         jsonResponse(res, 200, spin);
         return;
@@ -225,18 +238,8 @@ function createRouter({
       if (pathname === "/api/games" && req.method === "POST") {
         auth.requireAuth(req);
         const body = await readBody(req);
-        if (body.cover && /^https?:\/\//i.test(body.cover)) {
-          try {
-            const cached = await coverCache.cacheCover(body.cover, body.title || body.id || "cover");
-            body.coverFallback = cached.remoteUrl;
-            if (cached.localUrl) {
-              body.cover = cached.localUrl;
-            }
-          } catch (_) {
-            body.coverFallback = body.cover;
-          }
-        }
         const game = state.upsertGame(body);
+        await state.store.whenIdle();
         broadcaster();
         jsonResponse(res, 201, game);
         return;
@@ -246,6 +249,7 @@ function createRouter({
         auth.requireAuth(req);
         const id = pathname.split("/")[3];
         state.deleteGame(id);
+        await state.store.whenIdle();
         broadcaster();
         jsonResponse(res, 200, { ok: true });
         return;
@@ -255,6 +259,7 @@ function createRouter({
         auth.requireAuth(req);
         const body = await readBody(req);
         const games = state.reorderGames(body.order || []);
+        await state.store.whenIdle();
         broadcaster();
         jsonResponse(res, 200, games);
         return;
@@ -264,6 +269,7 @@ function createRouter({
         auth.requireAuth(req);
         const body = await readBody(req);
         const wheelConfig = state.updateWheelConfig(body);
+        await state.store.whenIdle();
         broadcaster();
         jsonResponse(res, 200, wheelConfig);
         return;

@@ -126,10 +126,10 @@ async function runControllerAction(action, options = {}) {
 
 function createDecoderText(element, options = {}) {
   const alphabet = options.alphabet || "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789%$#@!?*+-=<>~";
-  const minDelayMs = options.minDelayMs || 26;
-  const maxDelayMs = options.maxDelayMs || 52;
+  const minDelayMs = options.minDelayMs || 15;
+  const maxDelayMs = options.maxDelayMs || 40;
   const minScrambles = options.minScrambles || 1;
-  const maxScrambles = options.maxScrambles || 3;
+  const maxScrambles = options.maxScrambles || 2;
   let targetText = "";
   let ticket = 0;
 

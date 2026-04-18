@@ -103,7 +103,8 @@ body {
 }
 
 .controller-footer__line,
-.controller-footer__status {
+.controller-footer__status,
+.controller-footer__brand {
   min-height: 1.1em;
   color: var(--cyan);
   font-size: 0.84rem;
@@ -118,6 +119,11 @@ body {
 .controller-footer__status {
   text-align: right;
   color: var(--muted);
+}
+
+.controller-footer__brand {
+  margin-left: auto;
+  color: rgba(248, 248, 242, 0.56);
 }
 
 .eyebrow {
@@ -544,6 +550,10 @@ button:active {
 
   .controller-footer__status {
     text-align: left;
+  }
+
+  .controller-footer__brand {
+    margin-left: 0;
   }
 
   .storage-meter {

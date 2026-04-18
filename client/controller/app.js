@@ -1,6 +1,11 @@
 const state = {
   admin: null,
   socket: null,
+  pending: {
+    nextGame: false,
+    forceResolve: false,
+    queueStartId: null,
+  },
   gameLookup: {
     controller: null,
     selectedSuggestion: null,
@@ -89,6 +94,31 @@ async function loadAdminState() {
   render();
 }
 
+async function runControllerAction(action, options = {}) {
+  const { status = "Working…", successStatus = "", setPending } = options;
+  if (typeof setPending === "function") {
+    setPending(true);
+    render();
+  }
+  els.statusLine.textContent = status;
+  try {
+    const result = await action();
+    await loadAdminState();
+    if (successStatus) {
+      els.statusLine.textContent = successStatus;
+    }
+    return result;
+  } catch (error) {
+    els.statusLine.textContent = error.message;
+    throw error;
+  } finally {
+    if (typeof setPending === "function") {
+      setPending(false);
+      render();
+    }
+  }
+}
+
 function connectSocket() {
   const protocol = location.protocol === "https:" ? "wss" : "ws";
   state.socket = new WebSocket(`${protocol}://${location.host}/ws?client=controller`);
@@ -124,8 +154,8 @@ function renderQueue() {
           <div class="muted">${new Date(item.createdAt).toLocaleTimeString()}</div>
           <div class="muted">Status: ${escapeHtml(item.status)}</div>
           <div class="inline-actions">
-            ${active ? `<button data-start="${item.id}">Start</button>` : ""}
-            ${active ? `<button class="danger" data-cancel="${item.id}">Cancel</button>` : ""}
+            ${active ? `<button type="button" data-start="${item.id}">Start</button>` : ""}
+            ${active ? `<button type="button" class="danger" data-cancel="${item.id}">Cancel</button>` : ""}
           </div>
         </div>
       `;
@@ -134,20 +164,32 @@ function renderQueue() {
 
   els.queueList.querySelectorAll("[data-start]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await request(`/api/queue/${button.dataset.start}/start`, { method: "POST" });
-      loadAdminState();
+      if (state.pending.queueStartId) {
+        return;
+      }
+      await runControllerAction(() => request(`/api/queue/${button.dataset.start}/start`, { method: "POST" }), {
+        status: "Starting spin…",
+        successStatus: "Spin started",
+        setPending: (pending) => {
+          state.pending.queueStartId = pending ? button.dataset.start : null;
+        },
+      });
     });
   });
   els.queueList.querySelectorAll("[data-cancel]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await request(`/api/queue/${button.dataset.cancel}/cancel`, { method: "POST" });
-      loadAdminState();
+      await runControllerAction(() => request(`/api/queue/${button.dataset.cancel}/cancel`, { method: "POST" }), {
+        status: "Canceling queue item…",
+        successStatus: "Queue item canceled",
+      });
     });
   });
 }
 
 function renderSpin() {
   const spin = state.admin.activeSpin;
+  els.nextGameButton.disabled = Boolean(spin || state.pending.nextGame || state.pending.queueStartId);
+  els.forceResolveButton.disabled = Boolean(!spin || state.pending.forceResolve);
   if (!spin) {
     els.activeSpin.innerHTML = "<p class='muted'>No active spin</p>";
     els.weightTarget.innerHTML = "";
@@ -244,14 +286,14 @@ function renderGames() {
           status: game.status === "in" ? "out" : "in",
         }),
       });
-      loadAdminState();
+      await loadAdminState();
     });
   });
 
   els.gamesList.querySelectorAll("[data-delete]").forEach((button) => {
     button.addEventListener("click", async () => {
       await request(`/api/games/${button.dataset.delete}`, { method: "DELETE" });
-      loadAdminState();
+      await loadAdminState();
     });
   });
 }
@@ -556,26 +598,47 @@ els.loginForm.addEventListener("submit", async (event) => {
 
 els.queueForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await request("/api/queue", {
-    method: "POST",
-    body: JSON.stringify({
-      viewerName: document.getElementById("viewer-name").value,
-      actionType: document.getElementById("action-type").value,
-      userInput: document.getElementById("user-input").value,
+  await runControllerAction(
+    () => request("/api/queue", {
+      method: "POST",
+      body: JSON.stringify({
+        viewerName: document.getElementById("viewer-name").value,
+        actionType: document.getElementById("action-type").value,
+        userInput: document.getElementById("user-input").value,
+      }),
     }),
-  });
+    {
+      status: "Queueing redeem…",
+      successStatus: "Redeem queued",
+    },
+  );
   els.queueForm.reset();
-  loadAdminState();
 });
 
 els.nextGameButton.addEventListener("click", async () => {
-  await request("/api/spins/next-game", { method: "POST" });
-  loadAdminState();
+  if (state.pending.nextGame) {
+    return;
+  }
+  await runControllerAction(() => request("/api/spins/next-game", { method: "POST" }), {
+    status: "Starting next game spin…",
+    successStatus: "Next game spin started",
+    setPending: (pending) => {
+      state.pending.nextGame = pending;
+    },
+  });
 });
 
 els.forceResolveButton.addEventListener("click", async () => {
-  await request("/api/spins/force-resolve", { method: "POST" });
-  loadAdminState();
+  if (state.pending.forceResolve) {
+    return;
+  }
+  await runControllerAction(() => request("/api/spins/force-resolve", { method: "POST" }), {
+    status: "Advancing active spin…",
+    successStatus: "Spin advanced",
+    setPending: (pending) => {
+      state.pending.forceResolve = pending;
+    },
+  });
 });
 
 els.refreshButton.addEventListener("click", () => {
@@ -594,7 +657,7 @@ els.connectTwitchButton.addEventListener("click", () => {
 els.disconnectTwitchButton.addEventListener("click", async () => {
   await request("/api/twitch/disconnect", { method: "POST" });
   els.statusLine.textContent = "Twitch disconnected";
-  loadAdminState();
+  await loadAdminState();
 });
 
 els.gameForm.addEventListener("submit", async (event) => {
@@ -618,7 +681,7 @@ els.gameForm.addEventListener("submit", async (event) => {
   clearGameSearchResults();
   els.gameSearchStatus.textContent = "Search IGDB by title and pick a match to auto-fill the cover.";
   updateCoverPreview("");
-  loadAdminState();
+  await loadAdminState();
 });
 
 els.gameDbForm.addEventListener("submit", async (event) => {
@@ -648,7 +711,7 @@ els.weightForm.addEventListener("submit", async (event) => {
       weightDelta: Number(document.getElementById("weight-delta").value || 1),
     }),
   });
-  loadAdminState();
+  await loadAdminState();
 });
 
 els.testRedeemButton.addEventListener("click", async () => {
@@ -693,7 +756,7 @@ els.wheelForm.addEventListener("submit", async (event) => {
     }),
   });
   els.statusLine.textContent = "Wheel feel updated";
-  loadAdminState();
+  await loadAdminState();
 });
 
 let gameSearchDebounce = null;

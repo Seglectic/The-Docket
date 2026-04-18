@@ -88,8 +88,8 @@ body {
   right: 0;
   bottom: 0;
   z-index: 20;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  display: flex;
+  justify-content: space-between;
   gap: 16px;
   align-items: center;
   min-height: 52px;
@@ -116,17 +116,15 @@ body {
   color: var(--accent);
   pointer-events: auto;
   cursor: help;
-  justify-self: start;
 }
 
 .controller-footer__status {
-  justify-self: center;
-  text-align: center;
+  text-align: right;
   color: var(--muted);
 }
 
 .controller-footer__brand {
-  justify-self: end;
+  margin-left: auto;
   color: rgba(248, 248, 242, 0.56);
 }
 
@@ -546,19 +544,18 @@ button:active {
   }
 
   .controller-footer {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: flex-start;
     gap: 6px;
     padding: 10px 14px;
   }
 
-  .controller-footer__line,
   .controller-footer__status {
-    justify-self: start;
     text-align: left;
   }
 
   .controller-footer__brand {
-    justify-self: start;
+    margin-left: 0;
   }
 
   .storage-meter {

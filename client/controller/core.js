@@ -180,28 +180,8 @@ export const footerDecoders = {
   }),
 };
 
-let footerStatusTicket = 0;
-let footerStatusClearTimer = null;
-
 export function setFooterStatus(message, options) {
-  const nextOptions = options || {};
-  const currentTicket = ++footerStatusTicket;
-  if (footerStatusClearTimer) {
-    window.clearTimeout(footerStatusClearTimer);
-    footerStatusClearTimer = null;
-  }
-  footerDecoders.status.setText(message, nextOptions);
-  const autoClearMs = nextOptions.autoClearMs ?? 2600;
-  const shouldClear = !nextOptions.persist && String(message || "").trim();
-  if (shouldClear) {
-    footerStatusClearTimer = window.setTimeout(() => {
-      if (footerStatusTicket !== currentTicket) {
-        return;
-      }
-      footerDecoders.status.setText("", { immediate: true });
-      footerStatusClearTimer = null;
-    }, autoClearMs);
-  }
+  footerDecoders.status.setText(message, options);
 }
 
 export function syncNumericSlider(input, output, value) {

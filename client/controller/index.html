@@ -22,8 +22,6 @@
         <header class="topbar">
           <div>
             <h1>The Docket Controller</h1>
-            <p id="status-line">Connecting…</p>
-            <p id="instance-line" class="muted">Instances: --</p>
           </div>
           <div class="actions">
             <button id="refresh-button" type="button">Refresh</button>
@@ -179,6 +177,11 @@
             <div id="storage-breakdown" class="storage-breakdown muted"></div>
           </div>
         </button>
+
+        <footer class="controller-footer" aria-live="polite">
+          <div id="instance-line" class="controller-footer__line">Instances: --</div>
+          <div id="status-line" class="controller-footer__status"></div>
+        </footer>
 
       </section>
     </main>

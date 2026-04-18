@@ -44,7 +44,7 @@ body {
 .layout {
   max-width: 1360px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 24px 24px 96px;
 }
 
 .topbar,
@@ -82,6 +82,44 @@ body {
   align-self: start;
 }
 
+.controller-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  min-height: 52px;
+  padding: 12px 22px;
+  background:
+    linear-gradient(180deg, rgba(10, 11, 17, 0), rgba(10, 11, 17, 0.92) 24%),
+    rgba(10, 11, 17, 0.92);
+  border-top: 1px solid rgba(116, 215, 236, 0.12);
+  backdrop-filter: blur(14px);
+  pointer-events: none;
+}
+
+.controller-footer__line,
+.controller-footer__status {
+  min-height: 1.1em;
+  color: var(--cyan);
+  font-size: 0.84rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.controller-footer__line {
+  color: var(--accent);
+}
+
+.controller-footer__status {
+  text-align: right;
+  color: var(--muted);
+}
+
 .eyebrow {
   margin: 0;
   color: var(--cyan);
@@ -101,7 +139,7 @@ body {
 .storage-widget {
   position: fixed;
   right: 22px;
-  bottom: 22px;
+  bottom: 68px;
   z-index: 30;
   width: 64px;
   display: grid;
@@ -480,7 +518,7 @@ button:active {
 
 @media (max-width: 720px) {
   .layout {
-    padding: 16px;
+    padding: 16px 16px 108px;
   }
 
   .topbar {
@@ -493,8 +531,19 @@ button:active {
 
   .storage-widget {
     right: 14px;
-    bottom: 14px;
+    bottom: 70px;
     width: 60px;
+  }
+
+  .controller-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 10px 14px;
+  }
+
+  .controller-footer__status {
+    text-align: left;
   }
 
   .storage-meter {

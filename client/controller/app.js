@@ -1,6 +1,9 @@
 const state = {
   admin: null,
   socket: null,
+  ui: {
+    storageExpanded: false,
+  },
   pending: {
     nextGame: false,
     forceResolve: false,
@@ -21,6 +24,8 @@ const els = {
   loginError: document.getElementById("login-error"),
   statusLine: document.getElementById("status-line"),
   instanceLine: document.getElementById("instance-line"),
+  storageWidget: document.getElementById("storage-widget"),
+  storageWidgetDetail: document.getElementById("storage-widget-detail"),
   storageUsageLabel: document.getElementById("storage-usage-label"),
   storageUsageDetail: document.getElementById("storage-usage-detail"),
   storageBreakdown: document.getElementById("storage-breakdown"),
@@ -100,16 +105,16 @@ async function runControllerAction(action, options = {}) {
     setPending(true);
     render();
   }
-  els.statusLine.textContent = status;
+  setFooterStatus(status);
   try {
     const result = await action();
     await loadAdminState();
     if (successStatus) {
-      els.statusLine.textContent = successStatus;
+      setFooterStatus(successStatus);
     }
     return result;
   } catch (error) {
-    els.statusLine.textContent = error.message;
+    setFooterStatus(error.message);
     throw error;
   } finally {
     if (typeof setPending === "function") {
@@ -119,12 +124,91 @@ async function runControllerAction(action, options = {}) {
   }
 }
 
+function createDecoderText(element, options = {}) {
+  const alphabet = options.alphabet || "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789%$#@!?*+-=<>~";
+  const minDelayMs = options.minDelayMs || 26;
+  const maxDelayMs = options.maxDelayMs || 52;
+  const minScrambles = options.minScrambles || 1;
+  const maxScrambles = options.maxScrambles || 3;
+  let targetText = "";
+  let ticket = 0;
+
+  function delay() {
+    return minDelayMs + Math.floor(Math.random() * Math.max(1, maxDelayMs - minDelayMs + 1));
+  }
+
+  function randomChar() {
+    return alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  async function animate(nextText, immediateTicket) {
+    let committed = "";
+    for (const char of nextText) {
+      if (ticket !== immediateTicket) {
+        return;
+      }
+      if (char === " ") {
+        committed += char;
+        element.textContent = committed;
+        await sleep(delay());
+        continue;
+      }
+      const scrambleCount = minScrambles + Math.floor(Math.random() * Math.max(1, maxScrambles - minScrambles + 1));
+      for (let index = 0; index < scrambleCount; index += 1) {
+        if (ticket !== immediateTicket) {
+          return;
+        }
+        element.textContent = `${committed}${randomChar()}`;
+        await sleep(delay());
+        if (ticket !== immediateTicket) {
+          return;
+        }
+        element.textContent = committed;
+        await sleep(Math.max(12, Math.round(delay() * 0.45)));
+      }
+      committed += char;
+      element.textContent = committed;
+      await sleep(delay());
+    }
+  }
+
+  return {
+    setText(nextText, { immediate = false } = {}) {
+      const normalized = String(nextText || "");
+      if (normalized === targetText) {
+        return;
+      }
+      targetText = normalized;
+      ticket += 1;
+      const currentTicket = ticket;
+      if (immediate) {
+        element.textContent = normalized;
+        return;
+      }
+      animate(normalized, currentTicket);
+    },
+  };
+}
+
+const footerDecoders = {
+  instances: createDecoderText(els.instanceLine),
+  status: createDecoderText(els.statusLine, {
+    minDelayMs: 22,
+    maxDelayMs: 46,
+  }),
+};
+
+function setFooterStatus(message, options) {
+  footerDecoders.status.setText(message, options);
+}
+
 function connectSocket() {
   const protocol = location.protocol === "https:" ? "wss" : "ws";
   state.socket = new WebSocket(`${protocol}://${location.host}/ws?client=controller`);
-  state.socket.addEventListener("open", () => {
-    els.statusLine.textContent = "Live connection ready";
-  });
   state.socket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
     if (message.type === "state" && message.payload.admin) {
@@ -133,7 +217,7 @@ function connectSocket() {
     }
   });
   state.socket.addEventListener("close", () => {
-    els.statusLine.textContent = "Disconnected. Retrying…";
+    setFooterStatus("Disconnected. Retrying…");
     window.setTimeout(connectSocket, 1500);
   });
 }
@@ -420,16 +504,19 @@ function render() {
 function renderConnections() {
   const connections = state.admin.connections;
   if (!connections) {
-    els.instanceLine.textContent = "Instances: --";
+    footerDecoders.instances.setText("Instances: --");
     return;
   }
   const visibleControllerCount = Math.max(0, connections.controller - 1);
   const visibleTotal = Math.max(0, connections.total - 1);
-  els.instanceLine.textContent =
-    `Instances: ${visibleTotal} total • C ${visibleControllerCount} • O ${connections.overlay} • P ${connections.public}`;
+  footerDecoders.instances.setText(
+    `Instances: ${visibleTotal} total • C ${visibleControllerCount} • O ${connections.overlay} • P ${connections.public}`,
+  );
 }
 
 function renderStorageUsage() {
+  els.storageWidget.setAttribute("aria-expanded", String(state.ui.storageExpanded));
+  els.storageWidgetDetail.classList.toggle("hidden", !state.ui.storageExpanded);
   const storage = state.admin.storage;
   if (!storage) {
     els.storageUsageLabel.textContent = "--";
@@ -645,6 +732,11 @@ els.refreshButton.addEventListener("click", () => {
   loadAdminState();
 });
 
+els.storageWidget.addEventListener("click", () => {
+  state.ui.storageExpanded = !state.ui.storageExpanded;
+  render();
+});
+
 els.logoutButton.addEventListener("click", async () => {
   await request("/api/logout", { method: "POST" });
   location.reload();
@@ -656,7 +748,7 @@ els.connectTwitchButton.addEventListener("click", () => {
 
 els.disconnectTwitchButton.addEventListener("click", async () => {
   await request("/api/twitch/disconnect", { method: "POST" });
-  els.statusLine.textContent = "Twitch disconnected";
+  setFooterStatus("Twitch disconnected");
   await loadAdminState();
 });
 
@@ -697,7 +789,7 @@ els.gameDbForm.addEventListener("submit", async (event) => {
       },
     }),
   });
-  els.statusLine.textContent = "Game database settings saved";
+  setFooterStatus("Game database settings saved");
   await loadAdminState();
 });
 
@@ -755,7 +847,7 @@ els.wheelForm.addEventListener("submit", async (event) => {
       },
     }),
   });
-  els.statusLine.textContent = "Wheel feel updated";
+  setFooterStatus("Wheel feel updated");
   await loadAdminState();
 });
 
@@ -784,15 +876,15 @@ els.gameCover.addEventListener("input", () => {
 });
 
 loadAdminState().then(connectSocket).catch(() => {
-  els.statusLine.textContent = "Login required";
+  setFooterStatus("Login required", { immediate: true });
 });
 
 const params = new URLSearchParams(window.location.search);
 if (params.get("twitch") === "connected") {
-  els.statusLine.textContent = "Twitch connected";
+  setFooterStatus("Twitch connected");
   history.replaceState({}, "", "/controller");
 }
 if (params.get("twitch_error")) {
-  els.statusLine.textContent = params.get("twitch_error");
+  setFooterStatus(params.get("twitch_error"));
   history.replaceState({}, "", "/controller");
 }

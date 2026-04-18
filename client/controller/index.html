@@ -66,13 +66,11 @@
                   <input id="game-db-enabled" type="checkbox" />
                   <span>Enable IGDB autocomplete</span>
                 </label>
-                <input id="game-db-client-id" placeholder="IGDB / Twitch Client ID" />
-                <input id="game-db-client-secret" type="password" placeholder="IGDB / Twitch Client Secret" />
                 <input id="game-db-max-results" type="number" min="1" max="20" value="8" placeholder="Max results" />
                 <button type="submit">Save Game DB Settings</button>
               </form>
-              <div class="muted">If these fields are blank, the app automatically reuses `twitch.app.clientId` and `twitch.app.clientSecret` from `config.yaml`.</div>
-              <div class="muted">Saved locally on this machine for the controller app. Restart is not required.</div>
+              <div class="muted">Uses the configured Twitch app credentials from `config.yaml` for IGDB access.</div>
+              <div class="muted">Saved locally on this machine for the controller app. Restart is not required unless you change the app credentials in config.</div>
             </section>
             <div id="games-list" class="stack games"></div>
           </article>
@@ -179,7 +177,11 @@
         </button>
 
         <footer class="controller-footer" aria-live="polite">
-          <div id="instance-line" class="controller-footer__line">Instances: --</div>
+          <div
+            id="instance-line"
+            class="controller-footer__line"
+            title="Live browser connections to The Docket: total viewers plus controller, overlay, and public page counts."
+          >Instances: --</div>
           <div id="status-line" class="controller-footer__status"></div>
           <div id="footer-brand" class="controller-footer__brand"></div>
         </footer>

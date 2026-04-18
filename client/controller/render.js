@@ -177,16 +177,13 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
       return;
     }
     els.gameDbEnabled.checked = Boolean(settings.enabled);
-    els.gameDbClientId.value = settings.igdb?.clientId || "";
-    els.gameDbClientSecret.value = settings.igdb?.clientSecret || "";
     els.gameDbMaxResults.value = Number(settings.maxResults || 8);
     if (settings.configured && settings.credentialSource === "twitchApp") {
       els.gameDbStatus.textContent = `${settings.enabled ? "Enabled" : "Disabled"} • Using Twitch app credentials from config.yaml`;
     } else if (settings.configured) {
-      els.gameDbStatus.textContent = `Configured • ${settings.enabled ? "Autocomplete enabled" : "Autocomplete disabled"}`;
+      els.gameDbStatus.textContent = `Configured • ${settings.enabled ? "Autocomplete enabled" : "Autocomplete disabled"} • Using IGDB override credentials already saved`;
     } else {
-      els.gameDbStatus.textContent =
-        "Using Twitch app creds is supported. Paste overrides here only if you want different IGDB credentials.";
+      els.gameDbStatus.textContent = "Game lookup is waiting on valid app credentials in config.yaml.";
     }
   }
 

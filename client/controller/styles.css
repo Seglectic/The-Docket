@@ -88,15 +88,15 @@ body {
   right: 0;
   bottom: 0;
   z-index: 20;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 16px;
   align-items: center;
   min-height: 52px;
   padding: 12px 22px;
   background:
-    linear-gradient(180deg, rgba(10, 11, 17, 0), rgba(10, 11, 17, 0.92) 24%),
-    rgba(10, 11, 17, 0.92);
+    linear-gradient(180deg, rgba(10, 11, 17, 0), rgba(10, 11, 17, 0.52) 24%),
+    rgba(10, 11, 17, 0.52);
   border-top: 1px solid rgba(116, 215, 236, 0.12);
   backdrop-filter: blur(14px);
   pointer-events: none;
@@ -114,15 +114,19 @@ body {
 
 .controller-footer__line {
   color: var(--accent);
+  pointer-events: auto;
+  cursor: help;
+  justify-self: start;
 }
 
 .controller-footer__status {
-  text-align: right;
+  justify-self: center;
+  text-align: center;
   color: var(--muted);
 }
 
 .controller-footer__brand {
-  margin-left: auto;
+  justify-self: end;
   color: rgba(248, 248, 242, 0.56);
 }
 
@@ -542,18 +546,19 @@ button:active {
   }
 
   .controller-footer {
-    flex-direction: column;
-    align-items: flex-start;
+    grid-template-columns: 1fr;
     gap: 6px;
     padding: 10px 14px;
   }
 
+  .controller-footer__line,
   .controller-footer__status {
+    justify-self: start;
     text-align: left;
   }
 
   .controller-footer__brand {
-    margin-left: 0;
+    justify-self: start;
   }
 
   .storage-meter {

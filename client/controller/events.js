@@ -130,10 +130,6 @@ export function bindControllerEvents({
       body: JSON.stringify({
         enabled: els.gameDbEnabled.checked,
         maxResults: Number(els.gameDbMaxResults.value || 8),
-        igdb: {
-          clientId: els.gameDbClientId.value,
-          clientSecret: els.gameDbClientSecret.value,
-        },
       }),
     });
     setFooterStatus("Game database settings saved");

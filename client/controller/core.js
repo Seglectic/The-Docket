@@ -54,8 +54,6 @@ export const els = {
   gameCoverPreview: document.getElementById("game-cover-preview"),
   gameDbForm: document.getElementById("game-db-form"),
   gameDbEnabled: document.getElementById("game-db-enabled"),
-  gameDbClientId: document.getElementById("game-db-client-id"),
-  gameDbClientSecret: document.getElementById("game-db-client-secret"),
   gameDbMaxResults: document.getElementById("game-db-max-results"),
   gameDbStatus: document.getElementById("game-db-status"),
   gamesList: document.getElementById("games-list"),
@@ -96,10 +94,10 @@ export async function request(url, options = {}) {
 
 export function createDecoderText(element, options = {}) {
   const alphabet = options.alphabet || "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789%$#@!?*+-=<>~";
-  const minDelayMs = options.minDelayMs || 15;
-  const maxDelayMs = options.maxDelayMs || 40;
+  const minDelayMs = options.minDelayMs || 9;
+  const maxDelayMs = options.maxDelayMs || 22;
   const minScrambles = options.minScrambles || 1;
-  const maxScrambles = options.maxScrambles || 2;
+  const maxScrambles = options.maxScrambles || 1;
   let targetText = "";
   let ticket = 0;
   let activePromise = Promise.resolve();
@@ -139,7 +137,7 @@ export function createDecoderText(element, options = {}) {
           return;
         }
         element.textContent = committed;
-        await sleep(Math.max(12, Math.round(delay() * 0.45)));
+        await sleep(Math.max(6, Math.round(delay() * 0.3)));
       }
       committed += char;
       element.textContent = committed;
@@ -168,19 +166,42 @@ export function createDecoderText(element, options = {}) {
 }
 
 export const footerDecoders = {
-  instances: createDecoderText(els.instanceLine),
+  instances: createDecoderText(els.instanceLine, {
+    minDelayMs: 8,
+    maxDelayMs: 18,
+  }),
   status: createDecoderText(els.statusLine, {
-    minDelayMs: 22,
-    maxDelayMs: 46,
+    minDelayMs: 10,
+    maxDelayMs: 22,
   }),
   brand: createDecoderText(els.footerBrand, {
-    minDelayMs: 18,
-    maxDelayMs: 34,
+    minDelayMs: 8,
+    maxDelayMs: 18,
   }),
 };
 
+let footerStatusTicket = 0;
+let footerStatusClearTimer = null;
+
 export function setFooterStatus(message, options) {
-  footerDecoders.status.setText(message, options);
+  const nextOptions = options || {};
+  const currentTicket = ++footerStatusTicket;
+  if (footerStatusClearTimer) {
+    window.clearTimeout(footerStatusClearTimer);
+    footerStatusClearTimer = null;
+  }
+  footerDecoders.status.setText(message, nextOptions);
+  const autoClearMs = nextOptions.autoClearMs ?? 2600;
+  const shouldClear = !nextOptions.persist && String(message || "").trim();
+  if (shouldClear) {
+    footerStatusClearTimer = window.setTimeout(() => {
+      if (footerStatusTicket !== currentTicket) {
+        return;
+      }
+      footerDecoders.status.setText("", { immediate: true });
+      footerStatusClearTimer = null;
+    }, autoClearMs);
+  }
 }
 
 export function syncNumericSlider(input, output, value) {

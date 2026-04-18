@@ -44,4 +44,10 @@ jobs:
           LIVE_HOST: ${{ secrets.LIVE_HOST }}
           LIVE_USER: ${{ secrets.LIVE_USER }}
         run: |
-          ssh "${LIVE_USER}@${LIVE_HOST}" 'bash /opt/the-docket/scripts/deploy-live.sh'
+          ssh "${LIVE_USER}@${LIVE_HOST}" '
+            cd /opt/the-docket &&
+            git fetch origin main &&
+            git checkout main &&
+            git pull --ff-only origin main &&
+            bash scripts/deploy-live.sh
+          '

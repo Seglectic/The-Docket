@@ -68,6 +68,21 @@ Notes:
 - `npm start` is the default runtime entrypoint for this project.
 - A reverse proxy such as Caddy can expose `/controller`, `/overlay`, and `/public` over HTTPS while the Node app listens on a local port.
 
+## Live Deploy Flow
+
+The GCP VM should be treated as the live environment.
+
+- Do regular work on a non-`main` branch such as `develop`.
+- Merge to `main` only when a change is ready for live.
+- A GitHub Actions workflow on `main` runs `npm test`, SSHes into the VM, pulls `main`, installs production dependencies, and restarts `the-docket.service`.
+
+The deploy workflow uses these GitHub Actions secrets:
+
+- `LIVE_DEPLOY_SSH_KEY`
+- `LIVE_HOST`
+- `LIVE_KNOWN_HOSTS`
+- `LIVE_USER`
+
 ## Notes
 
 - Runtime data is created in `data/` on first run.

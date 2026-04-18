@@ -1,0 +1,47 @@
+name: Deploy Live
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: deploy-live
+  cancel-in-progress: true
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.LIVE_DEPLOY_SSH_KEY }}
+
+      - name: Add live host key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.LIVE_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy to live
+        env:
+          LIVE_HOST: ${{ secrets.LIVE_HOST }}
+          LIVE_USER: ${{ secrets.LIVE_USER }}
+        run: |
+          ssh "${LIVE_USER}@${LIVE_HOST}" 'bash /opt/the-docket/scripts/deploy-live.sh'

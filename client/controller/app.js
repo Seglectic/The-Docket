@@ -74,6 +74,8 @@ bindControllerEvents({
   closeQueueEditor: renderer.closeQueueEditor,
   closeWheelFeel: renderer.closeWheelFeel,
   openQueueEditor: renderer.openQueueEditor,
+  openGameEditor: renderer.openGameEditor,
+  rememberGameStatus: renderer.rememberGameStatus,
   renderWheelFeel: renderer.renderWheelFeel,
   searchGames: renderer.searchGames,
   setGameStatus: renderer.setGameStatus,

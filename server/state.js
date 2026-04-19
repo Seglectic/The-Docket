@@ -1,6 +1,13 @@
 const { now, pickWeighted, randomId } = require("./utils");
 const { deriveWheelProfile } = require("../client/overlay/spin-plan");
 
+const GAME_STATUSES = ["in", "out", "seasonal", "new_release", "queue"];
+const OVERRIDE_GAME_STATUSES = ["seasonal", "new_release", "queue"];
+
+function normalizeGameStatus(status) {
+  return GAME_STATUSES.includes(status) ? status : "in";
+}
+
 class DocketState {
   constructor(store, config, options = {}) {
     this.store = store;
@@ -38,10 +45,14 @@ class DocketState {
 
   publicSnapshot() {
     const state = this.snapshot();
+    const overrideGame = state.session.overrideGameId
+      ? state.games.find((game) => game.id === state.session.overrideGameId) || null
+      : null;
     return {
       games: state.games,
       activeSpin: state.activeSpin,
       lastCompletedSpin: state.lastCompletedSpin,
+      overrideGame,
       overlayTitle: state.config.overlayTitle,
       wheelConfig: state.config.wheel || {},
     };
@@ -147,11 +158,20 @@ class DocketState {
   }
 
   getSession() {
-    return this.store.readJson("session");
+    const session = this.store.readJson("session") || {};
+    return {
+      activeSpinId: session.activeSpinId || null,
+      pendingChoice: session.pendingChoice || null,
+      overrideGameId: session.overrideGameId || null,
+    };
   }
 
   setSession(session) {
-    this.store.writeJson("session", session);
+    this.store.writeJson("session", {
+      activeSpinId: session.activeSpinId || null,
+      pendingChoice: session.pendingChoice || null,
+      overrideGameId: session.overrideGameId || null,
+    });
   }
 
   updateSession(patch) {
@@ -235,12 +255,13 @@ class DocketState {
   upsertGame(input) {
     const games = this.getGames();
     const existing = input.id ? games.find((entry) => entry.id === input.id) : null;
+    const normalizedStatus = normalizeGameStatus(input.status);
     if (existing) {
       Object.assign(existing, {
         title: input.title,
         cover: input.cover || "",
         coverFallback: input.coverFallback !== undefined ? input.coverFallback || "" : existing.coverFallback || "",
-        status: input.status,
+        status: normalizedStatus,
         baseWeight: Number(input.baseWeight || 1),
         sortOrder: Number(input.sortOrder || existing.sortOrder || games.length + 1),
         locked: Boolean(input.locked),
@@ -250,6 +271,9 @@ class DocketState {
         releaseYear: Number(input.releaseYear || 0) || null,
       });
       this.setGames(games);
+      if (this.getSession().overrideGameId === existing.id && !OVERRIDE_GAME_STATUSES.includes(existing.status)) {
+        this.updateSession({ overrideGameId: null });
+      }
       this.record("game.updated", { id: existing.id });
       return existing;
     }
@@ -258,7 +282,7 @@ class DocketState {
       title: input.title,
       cover: input.cover || "",
       coverFallback: input.coverFallback || "",
-      status: input.status || "in",
+      status: normalizedStatus,
       baseWeight: Number(input.baseWeight || 1),
       sortOrder: Number(input.sortOrder || games.length + 1),
       locked: Boolean(input.locked),
@@ -276,7 +300,30 @@ class DocketState {
   deleteGame(id) {
     const games = this.getGames().filter((entry) => entry.id !== id);
     this.setGames(games);
+    if (this.getSession().overrideGameId === id) {
+      this.updateSession({ overrideGameId: null });
+    }
     this.record("game.deleted", { id });
+  }
+
+  setOverrideGame(gameId) {
+    if (!gameId) {
+      this.updateSession({ overrideGameId: null });
+      this.record("game.override_cleared", {});
+      return null;
+    }
+
+    const game = this.getGames().find((entry) => entry.id === gameId);
+    if (!game) {
+      throw new Error("Game not found");
+    }
+    if (!OVERRIDE_GAME_STATUSES.includes(game.status)) {
+      throw new Error("Only Seasonal, New Release, or Queue games can be overridden");
+    }
+
+    this.updateSession({ overrideGameId: game.id });
+    this.record("game.override_set", { id: game.id, status: game.status });
+    return game;
   }
 
   reorderGames(order) {
@@ -549,6 +596,9 @@ class DocketState {
       if (game) {
         game.status = "in";
         game.locked = false;
+        if (this.getSession().overrideGameId === game.id) {
+          this.updateSession({ overrideGameId: null });
+        }
       }
     }
 
@@ -557,6 +607,9 @@ class DocketState {
       if (game && spin.type === "eliminate") {
         if (!game.locked) {
           game.status = "out";
+          if (this.getSession().overrideGameId === game.id) {
+            this.updateSession({ overrideGameId: null });
+          }
         }
       }
     }
@@ -589,7 +642,7 @@ class DocketState {
 
   buildEligibleEntries(wheelScope) {
     const games = this.getGames()
-      .filter((game) => game.status === wheelScope)
+      .filter((game) => (wheelScope === "in" || wheelScope === "out") && game.status === wheelScope)
       .map((game) => ({
         entryKind: "game",
         entryId: game.id,
@@ -646,10 +699,16 @@ class DocketState {
     if (spin.type === "restore") {
       game.status = "in";
       game.locked = false;
+      if (this.getSession().overrideGameId === game.id) {
+        this.updateSession({ overrideGameId: null });
+      }
     }
     if (spin.type === "eliminate") {
       if (!game.locked) {
         game.status = "out";
+        if (this.getSession().overrideGameId === game.id) {
+          this.updateSession({ overrideGameId: null });
+        }
       }
     }
 
@@ -746,4 +805,6 @@ class DocketState {
 
 module.exports = {
   DocketState,
+  GAME_STATUSES,
+  OVERRIDE_GAME_STATUSES,
 };

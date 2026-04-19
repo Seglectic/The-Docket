@@ -41,6 +41,30 @@ body {
   gap: 18px;
 }
 
+.override-panel {
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(189, 147, 249, 0.22), rgba(139, 233, 253, 0.12)),
+    var(--card);
+  border: 1px solid rgba(98, 114, 164, 0.24);
+  backdrop-filter: blur(10px);
+}
+
+.override-panel__eyebrow {
+  margin-bottom: 6px;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.override-panel__content {
+  font-size: clamp(20px, 3vw, 30px);
+  font-weight: 700;
+}
+
 .column {
   padding: 20px;
   border-radius: 22px;
@@ -63,6 +87,11 @@ body {
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(30, 50, 56, 0.08);
+}
+
+.item--override-active {
+  border-color: rgba(108, 92, 231, 0.34);
+  box-shadow: 0 12px 28px rgba(108, 92, 231, 0.12);
 }
 
 .cover {

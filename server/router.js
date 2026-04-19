@@ -255,6 +255,16 @@ function createRouter({
         return;
       }
 
+      if (pathname === "/api/games/override" && req.method === "POST") {
+        auth.requireAuth(req);
+        const body = await readBody(req);
+        const game = state.setOverrideGame(body.gameId || null);
+        await state.store.whenIdle();
+        broadcaster();
+        jsonResponse(res, 200, { game });
+        return;
+      }
+
       if (pathname.startsWith("/api/games/") && req.method === "DELETE") {
         auth.requireAuth(req);
         const id = pathname.split("/")[3];

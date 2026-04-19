@@ -293,6 +293,59 @@ test("GET /api/game-db/search returns suggestions when authenticated", async () 
   assert.equal(body.suggestions[0].title, "Matched halo");
 });
 
+test("POST /api/games/override sets and clears the active override game", async () => {
+  const { state, config } = await createState();
+  const auth = new AuthManager(config);
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth,
+    state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
+    broadcaster: () => {},
+  });
+
+  const login = await runRoute(route, {
+    method: "POST",
+    url: "/api/login",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: { secret: "test-secret" },
+  });
+  const cookie = login.headers["Set-Cookie"] || login.headers["set-cookie"];
+  const game = state.upsertGame({ title: "Seasonal Pick", status: "seasonal", baseWeight: 1 });
+
+  const setResponse = await runRoute(route, {
+    method: "POST",
+    url: "/api/games/override",
+    headers: {
+      "content-type": "application/json",
+      cookie,
+    },
+    body: { gameId: game.id },
+  });
+
+  assert.equal(setResponse.statusCode, 200);
+  assert.equal(JSON.parse(setResponse.body).game.id, game.id);
+  assert.equal(state.getSession().overrideGameId, game.id);
+
+  const clearResponse = await runRoute(route, {
+    method: "POST",
+    url: "/api/games/override",
+    headers: {
+      "content-type": "application/json",
+      cookie,
+    },
+    body: { gameId: null },
+  });
+
+  assert.equal(clearResponse.statusCode, 200);
+  assert.equal(JSON.parse(clearResponse.body).game, null);
+  assert.equal(state.getSession().overrideGameId, null);
+});
+
 test("POST /api/game-db/settings persists IGDB credentials when authenticated", async () => {
   const { state, config } = await createState();
   const auth = new AuthManager(config);

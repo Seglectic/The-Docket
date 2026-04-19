@@ -1,4 +1,4 @@
-import { LAST_GAME_STATUS_KEY, els, request, state } from "./core.js";
+import { els, request, state } from "./core.js";
 
 export function bindControllerEvents({
   loadAdminState,
@@ -10,7 +10,9 @@ export function bindControllerEvents({
   closeGameEditor,
   closeQueueEditor,
   closeWheelFeel,
+  openGameEditor,
   openQueueEditor,
+  rememberGameStatus,
   renderWheelFeel,
   searchGames,
   setGameStatus,
@@ -19,6 +21,7 @@ export function bindControllerEvents({
   openWheelFeel,
 }) {
   let gameSearchDebounce = null;
+  let lastSearchTriggeredAt = 0;
 
   function isTypingField(target) {
     if (!(target instanceof HTMLElement)) {
@@ -304,18 +307,32 @@ export function bindControllerEvents({
         releaseYear: els.gameReleaseYear.value,
       }),
     });
-    try {
-      window.localStorage.setItem(LAST_GAME_STATUS_KEY, els.gameStatus.value || "in");
-    } catch (_) {
-      // Ignore storage failures.
-    }
+    rememberGameStatus(els.gameStatus.value || "in");
     els.gameForm.reset();
     clearGameMetadataSelection();
     clearGameSearchResults();
-    els.gameSearchStatus.textContent = "Search IGDB by title and pick a match to auto-fill the cover.";
+    els.gameSearchStatus.textContent = "Type at least 3 characters to search IGDB by title.";
     updateCoverPreview("");
     closeGameEditor();
     await loadAdminState();
+  });
+
+  els.gameForm.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    if (target.closest("#game-search-results")) {
+      return;
+    }
+    if (target.tagName === "TEXTAREA") {
+      return;
+    }
+    event.preventDefault();
+    els.gameForm.requestSubmit();
   });
 
   els.weightForm.addEventListener("submit", async (event) => {
@@ -383,8 +400,19 @@ export function bindControllerEvents({
     }
     window.clearTimeout(gameSearchDebounce);
     gameSearchDebounce = window.setTimeout(() => {
+      const now = Date.now();
+      const delaySinceLastSearch = now - lastSearchTriggeredAt;
+      if (delaySinceLastSearch < 350) {
+        window.clearTimeout(gameSearchDebounce);
+        gameSearchDebounce = window.setTimeout(() => {
+          lastSearchTriggeredAt = Date.now();
+          searchGames(els.gameTitle.value);
+        }, 350 - delaySinceLastSearch);
+        return;
+      }
+      lastSearchTriggeredAt = now;
       searchGames(els.gameTitle.value);
-    }, 160);
+    }, 380);
   });
 
   els.gameTitle.addEventListener("blur", () => {
@@ -399,7 +427,73 @@ export function bindControllerEvents({
     updateCoverPreview(els.gameCover.value);
   });
 
-  [els.gameStatusIn, els.gameStatusOut].forEach((button) => {
+  els.gamesList.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const addButton = target.closest("[data-game-add]");
+    if (addButton) {
+      openGameEditor(null);
+      return;
+    }
+
+    const editButton = target.closest("[data-edit]");
+    if (editButton instanceof HTMLElement) {
+      const game = state.admin?.games?.find((entry) => entry.id === editButton.dataset.edit);
+      if (game) {
+        openGameEditor(game);
+      }
+      return;
+    }
+
+    const toggleButton = target.closest("[data-toggle]");
+    const toggleWheelButton = target.closest("[data-toggle-wheel-status]");
+    if (toggleWheelButton instanceof HTMLElement) {
+      const game = state.admin?.games?.find((entry) => entry.id === toggleWheelButton.dataset.toggleWheelStatus);
+      if (!game) {
+        return;
+      }
+      await request("/api/games", {
+        method: "POST",
+        body: JSON.stringify({
+          ...game,
+          status: game.status === "in" ? "out" : "in",
+        }),
+      });
+      await loadAdminState();
+      return;
+    }
+
+    const overrideButton = target.closest("[data-override]");
+    if (overrideButton instanceof HTMLElement) {
+      const gameId = overrideButton.dataset.override;
+      const isActive = state.admin?.session?.overrideGameId === gameId;
+      await request("/api/games/override", {
+        method: "POST",
+        body: JSON.stringify({
+          gameId: isActive ? null : gameId,
+        }),
+      });
+      await loadAdminState();
+      return;
+    }
+
+    const deleteButton = target.closest("[data-delete]");
+    if (deleteButton instanceof HTMLElement) {
+      await request(`/api/games/${deleteButton.dataset.delete}`, { method: "DELETE" });
+      await loadAdminState();
+    }
+  });
+
+  [
+    els.gameStatusIn,
+    els.gameStatusOut,
+    els.gameStatusSeasonal,
+    els.gameStatusNewRelease,
+    els.gameStatusQueue,
+  ].forEach((button) => {
     button.addEventListener("click", () => {
       setGameStatus(button.dataset.gameStatusValue);
     });

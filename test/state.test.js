@@ -261,3 +261,40 @@ test("upsertGame persists metadata fields for auto-matched titles", async () => 
   assert.equal(game.metadataId, "119171");
   assert.equal(game.releaseYear, 2021);
 });
+
+test("seasonal, new release, and queue games stay off the wheels", async () => {
+  const { state } = await setup();
+  state.upsertGame({ title: "Seasonal Pick", status: "seasonal", baseWeight: 1 });
+  state.upsertGame({ title: "Fresh Drop", status: "new_release", baseWeight: 1 });
+  state.upsertGame({ title: "Queue Slot", status: "queue", baseWeight: 1 });
+
+  const inEntries = state.buildEligibleEntries("in");
+  const outEntries = state.buildEligibleEntries("out");
+
+  assert(inEntries.every((entry) => entry.entryId !== "Seasonal Pick"));
+  assert(outEntries.every((entry) => entry.entryId !== "Fresh Drop"));
+  assert.equal(inEntries.some((entry) => entry.label === "Seasonal Pick"), false);
+  assert.equal(inEntries.some((entry) => entry.label === "Fresh Drop"), false);
+  assert.equal(inEntries.some((entry) => entry.label === "Queue Slot"), false);
+  assert.equal(outEntries.some((entry) => entry.label === "Seasonal Pick"), false);
+  assert.equal(outEntries.some((entry) => entry.label === "Fresh Drop"), false);
+  assert.equal(outEntries.some((entry) => entry.label === "Queue Slot"), false);
+});
+
+test("only one override game can be active at a time", async () => {
+  const { state } = await setup();
+  const seasonal = state.upsertGame({ title: "Seasonal Pick", status: "seasonal", baseWeight: 1 });
+  const queued = state.upsertGame({ title: "Queue Pick", status: "queue", baseWeight: 1 });
+
+  const first = state.setOverrideGame(seasonal.id);
+  assert.equal(first.id, seasonal.id);
+  assert.equal(state.getSession().overrideGameId, seasonal.id);
+
+  const second = state.setOverrideGame(queued.id);
+  assert.equal(second.id, queued.id);
+  assert.equal(state.getSession().overrideGameId, queued.id);
+
+  const cleared = state.setOverrideGame(null);
+  assert.equal(cleared, null);
+  assert.equal(state.getSession().overrideGameId, null);
+});

@@ -195,13 +195,16 @@
                   <input id="game-title" placeholder="Game title" autocomplete="off" required />
                   <div id="game-search-results" class="search-results hidden"></div>
                 </div>
-                <div id="game-search-status" class="muted search-status">Search IGDB by title and pick a match to auto-fill the cover.</div>
+                <div id="game-search-status" class="muted search-status">Type at least 3 characters to search IGDB by title.</div>
                 <input id="game-cover" placeholder="Cover URL (optional)" />
                 <div class="game-editor-art-row">
                   <div id="game-cover-preview" class="cover-preview">No cover selected</div>
                   <div class="game-status-toggle" role="group" aria-label="Game status">
                     <button id="game-status-in" class="secondary" type="button" data-game-status-value="in">In</button>
                     <button id="game-status-out" class="secondary" type="button" data-game-status-value="out">Out</button>
+                    <button id="game-status-seasonal" class="secondary" type="button" data-game-status-value="seasonal">Seasonal</button>
+                    <button id="game-status-new-release" class="secondary" type="button" data-game-status-value="new_release">New Release</button>
+                    <button id="game-status-queue" class="secondary" type="button" data-game-status-value="queue">Queue</button>
                   </div>
                 </div>
                 <button type="submit">Save Game</button>

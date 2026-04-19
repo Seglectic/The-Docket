@@ -11,6 +11,46 @@ import {
   syncNumericSlider,
 } from "./core.js";
 
+const GAME_STATUS_LABELS = {
+  in: "In",
+  out: "Out",
+  seasonal: "Seasonal",
+  new_release: "New Release",
+  queue: "Queue",
+};
+
+const GAME_STATUS_ORDER = {
+  in: 0,
+  out: 1,
+  seasonal: 2,
+  new_release: 3,
+  queue: 4,
+};
+
+const GAME_GROUPS = [
+  {
+    key: "wheel",
+    title: "Wheel",
+    statuses: ["in", "out"],
+    includeAddTile: true,
+  },
+  {
+    key: "new_release",
+    title: "New Releases",
+    statuses: ["new_release"],
+  },
+  {
+    key: "seasonal",
+    title: "Seasonal",
+    statuses: ["seasonal"],
+  },
+  {
+    key: "queue",
+    title: "Queue",
+    statuses: ["queue"],
+  },
+];
+
 export function createRenderer({ request, loadAdminState, runControllerAction, setFooterStatus }) {
   const brokenImageMarkup = `
     <svg class="cover-preview__icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -53,7 +93,7 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
   function persistedGameStatus() {
     try {
       const value = window.localStorage.getItem(LAST_GAME_STATUS_KEY);
-      return value === "out" ? "out" : "in";
+      return GAME_STATUS_LABELS[value] ? value : "in";
     } catch (_) {
       return "in";
     }
@@ -61,19 +101,30 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
 
   function rememberGameStatus(status) {
     try {
-      window.localStorage.setItem(LAST_GAME_STATUS_KEY, status === "out" ? "out" : "in");
+      window.localStorage.setItem(LAST_GAME_STATUS_KEY, GAME_STATUS_LABELS[status] ? status : "in");
     } catch (_) {
       // Ignore storage failures.
     }
   }
 
   function setGameStatus(status) {
-    const nextStatus = status === "out" ? "out" : "in";
+    const nextStatus = GAME_STATUS_LABELS[status] ? status : "in";
     els.gameStatus.value = nextStatus;
-    els.gameStatusIn.classList.toggle("is-active", nextStatus === "in");
-    els.gameStatusOut.classList.toggle("is-active", nextStatus === "out");
-    els.gameStatusIn.setAttribute("aria-pressed", String(nextStatus === "in"));
-    els.gameStatusOut.setAttribute("aria-pressed", String(nextStatus === "out"));
+    [
+      els.gameStatusIn,
+      els.gameStatusOut,
+      els.gameStatusSeasonal,
+      els.gameStatusNewRelease,
+      els.gameStatusQueue,
+    ].forEach((button) => {
+      const active = button.dataset.gameStatusValue === nextStatus;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+  }
+
+  function isOverrideEligible(status) {
+    return status === "seasonal" || status === "new_release" || status === "queue";
   }
 
   function openGameEditor(game) {
@@ -105,7 +156,7 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
       state.gameLookup.selectedSuggestion = null;
       setGameStatus(persistedGameStatus());
       els.gameWeight.value = 1;
-      els.gameSearchStatus.textContent = "Search IGDB by title and pick a match to auto-fill the cover.";
+      els.gameSearchStatus.textContent = "Type at least 3 characters to search IGDB by title.";
       updateCoverPreview("");
     }
     clearGameSearchResults();
@@ -191,26 +242,42 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
   }
 
   function renderGames() {
+    const activeOverrideId = state.admin.session?.overrideGameId || null;
     const games = state.admin.games.slice().sort((a, b) => {
-      if (a.status !== b.status) {
-        return a.status === "in" ? -1 : 1;
+      const statusDiff = (GAME_STATUS_ORDER[a.status] ?? 99) - (GAME_STATUS_ORDER[b.status] ?? 99);
+      if (statusDiff !== 0) {
+        return statusDiff;
       }
       return a.title.localeCompare(b.title);
     });
-    els.gamesList.innerHTML = `
-      ${games
-        .map(
-          (game) => `
-            <article class="game-tile game-tile--${game.status}">
+
+    const renderGameTile = (game) => `
+            <article class="game-tile game-tile--${game.status}${activeOverrideId === game.id ? " game-tile--override-active" : ""}">
               <button class="game-tile__button" type="button" data-edit="${game.id}">
                 <div class="game-tile__cover" style="${coverStyle(game.cover, game.coverFallback)}"></div>
                 <div class="game-tile__title">${escapeHtml(game.title)}</div>
                 <div class="game-tile__meta-row">
                   <span class="game-tile__year muted">${game.releaseYear || ""}</span>
+                  <span class="game-tile__status muted">${escapeHtml(GAME_STATUS_LABELS[game.status] || "In")}</span>
                 </div>
               </button>
               <div class="game-tile__actions">
-                <button class="secondary game-tile__chip game-tile__chip--state" type="button" data-toggle="${game.id}">${game.status === "in" ? "IN" : "OUT"}</button>
+                ${
+                  game.status === "in" || game.status === "out"
+                    ? `<button class="secondary game-tile__chip game-tile__chip--state" type="button" data-toggle-wheel-status="${game.id}">
+                        ${escapeHtml(GAME_STATUS_LABELS[game.status] || "In")}
+                      </button>`
+                    : `<button class="secondary game-tile__chip game-tile__chip--state" type="button" data-edit="${game.id}" title="Edit game type">
+                        ${escapeHtml(GAME_STATUS_LABELS[game.status] || "In")}
+                      </button>`
+                }
+                ${
+                  isOverrideEligible(game.status)
+                    ? `<button class="secondary game-tile__chip game-tile__chip--override${activeOverrideId === game.id ? " is-active" : ""}" type="button" data-override="${game.id}">
+                        ${activeOverrideId === game.id ? "OVERRIDE" : "Override"}
+                      </button>`
+                    : ""
+                }
                 <button class="danger game-tile__chip game-tile__chip--icon" type="button" data-delete="${game.id}" aria-label="Delete game" title="Delete game">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M4 7h16" />
@@ -222,52 +289,31 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
                 </button>
               </div>
             </article>
-          `,
-        )
-        .join("")}
-      <button id="game-add-button" class="game-add-tile" type="button" aria-label="Add game">
-        <span class="game-add-tile__plus">+</span>
-        <span>Add Game</span>
-      </button>
-    `;
+          `;
 
-    els.gamesList.querySelector("#game-add-button")?.addEventListener("click", () => {
-      openGameEditor(null);
-    });
+    els.gamesList.innerHTML = GAME_GROUPS.map((group, index) => {
+      const groupGames = games.filter((game) => group.statuses.includes(game.status));
+      const addTile = group.includeAddTile
+        ? `
+          <button class="game-add-tile" type="button" aria-label="Add game" data-game-add="true">
+            <span class="game-add-tile__plus">+</span>
+            <span>Add Game</span>
+          </button>
+        `
+        : "";
 
-    els.gamesList.querySelectorAll("[data-edit]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const game = state.admin.games.find((entry) => entry.id === button.dataset.edit);
-        if (!game) {
-          return;
-        }
-        openGameEditor(game);
-      });
-    });
-
-    els.gamesList.querySelectorAll("[data-toggle]").forEach((button) => {
-      button.addEventListener("click", async () => {
-        const game = state.admin.games.find((entry) => entry.id === button.dataset.toggle);
-        if (!game) {
-          return;
-        }
-        await request("/api/games", {
-          method: "POST",
-          body: JSON.stringify({
-            ...game,
-            status: game.status === "in" ? "out" : "in",
-          }),
-        });
-        await loadAdminState();
-      });
-    });
-
-    els.gamesList.querySelectorAll("[data-delete]").forEach((button) => {
-      button.addEventListener("click", async () => {
-        await request(`/api/games/${button.dataset.delete}`, { method: "DELETE" });
-        await loadAdminState();
-      });
-    });
+      return `
+        <section class="games-section${index > 0 ? " games-section--divided" : ""}">
+          <header class="games-section__header">
+            <h3>${escapeHtml(group.title)}</h3>
+          </header>
+          <div class="games-section__grid">
+            ${groupGames.map((game) => renderGameTile(game)).join("")}
+            ${addTile}
+          </div>
+        </section>
+      `;
+    }).join("");
   }
 
   function renderGameEditor() {
@@ -478,9 +524,9 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
   async function searchGames(query) {
     const trimmed = query.trim();
     state.gameLookup.lastQuery = trimmed;
-    if (trimmed.length < 2) {
+    if (trimmed.length < 3) {
       clearGameSearchResults();
-      els.gameSearchStatus.textContent = "Search IGDB by title and pick a match to auto-fill the cover.";
+      els.gameSearchStatus.textContent = "Type at least 3 characters to search IGDB by title.";
       return;
     }
 
@@ -583,6 +629,7 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     render,
     renderWheelFeel,
     searchGames,
+    rememberGameStatus,
     setGameStatus,
     updateCoverPreview,
   };

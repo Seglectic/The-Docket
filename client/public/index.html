@@ -13,6 +13,10 @@
         <h1 id="title">The Docket</h1>
         <p id="last-action">Live docket board</p>
       </header>
+      <section id="override-panel" class="override-panel">
+        <div class="override-panel__eyebrow">Current Override</div>
+        <div id="override-current" class="override-panel__content">Wheel result is live</div>
+      </section>
       <section class="board">
         <article class="column">
           <h2>In</h2>
@@ -21,6 +25,10 @@
         <article class="column">
           <h2>Out</h2>
           <div id="out-list" class="items"></div>
+        </article>
+        <article class="column column--override-pool">
+          <h2>Override Pool</h2>
+          <div id="override-list" class="items"></div>
         </article>
       </section>
     </main>

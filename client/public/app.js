@@ -1,7 +1,9 @@
 const title = document.getElementById("title");
 const lastAction = document.getElementById("last-action");
+const overrideCurrent = document.getElementById("override-current");
 const inList = document.getElementById("in-list");
 const outList = document.getElementById("out-list");
+const overrideList = document.getElementById("override-list");
 
 const appState = {
   data: null,
@@ -32,7 +34,9 @@ async function bootstrap() {
 function render() {
   const data = appState.data;
   title.textContent = data.overlayTitle || "The Docket";
-  if (data.activeSpin?.winner && (data.activeSpin.status === "reveal" || data.activeSpin.status === "complete")) {
+  if (data.overrideGame) {
+    lastAction.textContent = `Override live: ${data.overrideGame.title}`;
+  } else if (data.activeSpin?.winner && (data.activeSpin.status === "reveal" || data.activeSpin.status === "complete")) {
     lastAction.textContent = `${data.activeSpin.viewerName || "Streamer"} • ${data.activeSpin.type} • ${data.activeSpin.winner.label}`;
   } else if (data.lastCompletedSpin?.winner) {
     lastAction.textContent = `Last result: ${data.lastCompletedSpin.winner.label}`;
@@ -41,25 +45,43 @@ function render() {
   } else {
     lastAction.textContent = "Live docket board";
   }
+  overrideCurrent.textContent = data.overrideGame
+    ? `${data.overrideGame.title} is overriding the wheel`
+    : "Wheel result is live";
   renderList(inList, data.games.filter((game) => game.status === "in"));
   renderList(outList, data.games.filter((game) => game.status === "out"));
+  renderList(overrideList, data.games.filter((game) => ["seasonal", "new_release", "queue"].includes(game.status)), {
+    activeOverrideId: data.overrideGame?.id || null,
+    showStatus: true,
+  });
 }
 
-function renderList(target, games) {
+function renderList(target, games, options = {}) {
   target.innerHTML = games
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map(
       (game) => `
-        <div class="item">
+        <div class="item${options.activeOverrideId === game.id ? " item--override-active" : ""}">
           <div class="cover" style="${resolveCoverStyle(game.cover, game.coverFallback)}"></div>
           <div>
             <strong>${escapeHtml(game.title)}</strong>
-            <div class="muted">Weight ${game.baseWeight}${game.locked ? " • Locked" : ""}</div>
+            <div class="muted">
+              ${options.showStatus ? `${escapeHtml(formatStatus(game.status))} • ` : ""}Weight ${game.baseWeight}${game.locked ? " • Locked" : ""}
+            </div>
           </div>
         </div>
       `,
     )
     .join("");
+}
+
+function formatStatus(status) {
+  if (status === "new_release") {
+    return "New Release";
+  }
+  return String(status || "")
+    .replaceAll("_", " ")
+    .replace(/^\w/, (match) => match.toUpperCase());
 }
 
 function resolveCoverStyle(primary, fallback) {

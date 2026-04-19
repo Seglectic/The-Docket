@@ -79,7 +79,52 @@ test("searchGames returns cached suggestions on repeat queries", async () => {
 
   assert.equal(first.suggestions[0].title, "Halo Infinite");
   assert.equal(second.cached, true);
-  assert.equal(calls, 2);
+  assert.equal(calls, 4);
+});
+
+test("searchGames prioritizes exact title matches over noisy partials", async () => {
+  const config = createConfig();
+  const store = setupStore(config);
+  let gameSearchCalls = 0;
+  const service = new GameDatabaseService(config, store, {
+    now: () => 10_000,
+    fetch: async (url) => {
+      if (String(url).includes("oauth2/token")) {
+        return {
+          ok: true,
+          json: async () => ({
+            access_token: "token-123",
+            expires_in: 3600,
+          }),
+        };
+      }
+      gameSearchCalls += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          gameSearchCalls === 1
+            ? [
+                { id: 2, name: "Control", slug: "control", first_release_date: 1568851200, rating_count: 200 },
+              ]
+            : gameSearchCalls === 2
+            ? [
+                { id: 1, name: "Star Control", first_release_date: 536457600, rating_count: 40 },
+                { id: 2, name: "Control", first_release_date: 1568851200, rating_count: 200 },
+                { id: 3, name: "Flight Control", first_release_date: 1245369600, rating_count: 10 },
+              ]
+            : [
+                { id: 3, name: "Flight Control", first_release_date: 1245369600, rating_count: 10 },
+                { id: 2, name: "Control", first_release_date: 1568851200, rating_count: 200 },
+              ],
+      };
+    },
+  });
+
+  const result = await service.searchGames("control");
+
+  assert.equal(result.suggestions[0].title, "Control");
+  assert.ok(result.suggestions.length >= 2);
 });
 
 test("searchGames reports disabled when IGDB credentials are absent", async () => {

@@ -1,6 +1,6 @@
 {
   "name": "the-docket",
-  "version": "0.1.0",
+  "version": "0.7.4",
   "description": "Local-first docket manager for stream wheel spins",
   "main": "server/index.js",
   "scripts": {

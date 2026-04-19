@@ -68,7 +68,7 @@ class FileStore {
       twitchAuth: { connected: false },
       queue: [],
       spins: [],
-      session: { activeSpinId: null },
+      session: { activeSpinId: null, pendingChoice: null },
       events: "",
     };
     for (const [key, fileName] of Object.entries(FILES)) {

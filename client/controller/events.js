@@ -1,4 +1,4 @@
-import { els, request, state } from "./core.js";
+import { LAST_GAME_STATUS_KEY, els, request, state } from "./core.js";
 
 export function bindControllerEvents({
   loadAdminState,
@@ -7,12 +7,60 @@ export function bindControllerEvents({
   connectSocket,
   clearGameMetadataSelection,
   clearGameSearchResults,
+  closeGameEditor,
+  closeQueueEditor,
+  closeWheelFeel,
+  openQueueEditor,
   renderWheelFeel,
   searchGames,
+  setGameStatus,
   setFooterStatus,
   updateCoverPreview,
+  openWheelFeel,
 }) {
   let gameSearchDebounce = null;
+
+  function isTypingField(target) {
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+    if (target.isContentEditable) {
+      return true;
+    }
+    if (target.tagName === "TEXTAREA" || target.tagName === "SELECT") {
+      return true;
+    }
+    if (target.tagName !== "INPUT") {
+      return false;
+    }
+    const inputType = (target.getAttribute("type") || "text").toLowerCase();
+    return !["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"].includes(inputType);
+  }
+
+  function closeDrawers() {
+    state.ui.gamesDrawerOpen = false;
+    state.ui.spinDrawerOpen = false;
+    state.ui.configDrawerOpen = false;
+    render();
+  }
+
+  function toggleDrawer(side) {
+    const openingGames = side === "games" && !state.ui.gamesDrawerOpen;
+    const openingSpin = side === "spin" && !state.ui.spinDrawerOpen;
+    const openingConfig = side === "config" && !state.ui.configDrawerOpen;
+    state.ui.gamesDrawerOpen = openingGames;
+    state.ui.spinDrawerOpen = openingSpin;
+    state.ui.configDrawerOpen = openingConfig;
+    render();
+  }
+
+  function setDrawerPeek(side, peeking) {
+    const drawer = side === "games" ? els.gamesDrawer : side === "spin" ? els.spinDrawer : els.configDrawer;
+    if (!drawer || drawer.classList.contains("is-open")) {
+      return;
+    }
+    drawer.classList.toggle("is-peeking", peeking);
+  }
 
   els.loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -47,6 +95,7 @@ export function bindControllerEvents({
       },
     );
     els.queueForm.reset();
+    closeQueueEditor();
   });
 
   els.nextGameButton.addEventListener("click", async () => {
@@ -75,12 +124,152 @@ export function bindControllerEvents({
     });
   });
 
-  els.refreshButton.addEventListener("click", () => {
-    loadAdminState();
+  els.gamesDrawerToggle.addEventListener("click", () => {
+    toggleDrawer("games");
   });
 
-  els.storageWidget.addEventListener("click", () => {
-    state.ui.storageExpanded = !state.ui.storageExpanded;
+  els.spinDrawerToggle.addEventListener("click", () => {
+    toggleDrawer("spin");
+  });
+
+  els.configDrawerToggle.addEventListener("click", () => {
+    toggleDrawer("config");
+  });
+
+  els.gamesDrawerClose.addEventListener("click", closeDrawers);
+  els.spinDrawerClose.addEventListener("click", closeDrawers);
+  els.configDrawerClose.addEventListener("click", closeDrawers);
+  els.drawerBackdrop.addEventListener("click", closeDrawers);
+  els.gameEditorClose.addEventListener("click", closeGameEditor);
+  els.queueModalOpen.addEventListener("click", openQueueEditor);
+  els.queueEditorClose.addEventListener("click", closeQueueEditor);
+  els.wheelFeelOpen.addEventListener("click", openWheelFeel);
+  els.wheelFeelClose.addEventListener("click", closeWheelFeel);
+
+  els.gamesDrawerToggle.addEventListener("mouseenter", () => {
+    setDrawerPeek("games", true);
+  });
+  els.gamesDrawerToggle.addEventListener("mouseleave", () => {
+    setDrawerPeek("games", false);
+  });
+  els.gamesDrawerToggle.addEventListener("focus", () => {
+    setDrawerPeek("games", true);
+  });
+  els.gamesDrawerToggle.addEventListener("blur", () => {
+    setDrawerPeek("games", false);
+  });
+
+  els.spinDrawerToggle.addEventListener("mouseenter", () => {
+    setDrawerPeek("spin", true);
+  });
+  els.spinDrawerToggle.addEventListener("mouseleave", () => {
+    setDrawerPeek("spin", false);
+  });
+  els.spinDrawerToggle.addEventListener("focus", () => {
+    setDrawerPeek("spin", true);
+  });
+  els.spinDrawerToggle.addEventListener("blur", () => {
+    setDrawerPeek("spin", false);
+  });
+
+  els.configDrawerToggle.addEventListener("mouseenter", () => {
+    setDrawerPeek("config", true);
+  });
+  els.configDrawerToggle.addEventListener("mouseleave", () => {
+    setDrawerPeek("config", false);
+  });
+  els.configDrawerToggle.addEventListener("focus", () => {
+    setDrawerPeek("config", true);
+  });
+  els.configDrawerToggle.addEventListener("blur", () => {
+    setDrawerPeek("config", false);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.ui.wheelFeelOpen) {
+      closeWheelFeel();
+      return;
+    }
+    if (event.key === "Escape" && state.ui.queueEditorOpen) {
+      closeQueueEditor();
+      return;
+    }
+    if (event.key === "Escape" && state.ui.gameEditorOpen) {
+      closeGameEditor();
+      return;
+    }
+    if (event.key !== "Escape") {
+      const target = event.target;
+      if (isTypingField(target)) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "arrowleft" || key === "a") {
+        event.preventDefault();
+        toggleDrawer("games");
+      } else if (key === "arrowright" || key === "d") {
+        event.preventDefault();
+        toggleDrawer("spin");
+      } else if (key === "arrowup" || key === "w") {
+        event.preventDefault();
+        toggleDrawer("config");
+      }
+      return;
+    }
+    if (!state.ui.gamesDrawerOpen && !state.ui.spinDrawerOpen && !state.ui.configDrawerOpen) {
+      return;
+    }
+    closeDrawers();
+  });
+
+  document.addEventListener("pointerdown", (event) => {
+    if (!state.ui.gamesDrawerOpen && !state.ui.spinDrawerOpen && !state.ui.configDrawerOpen && !state.ui.gameEditorOpen && !state.ui.queueEditorOpen && !state.ui.wheelFeelOpen) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    if (state.ui.gameEditorOpen) {
+      if (target.closest(".game-editor-modal__card")) {
+        return;
+      }
+      if (target.closest(".game-editor-modal")) {
+        closeGameEditor();
+        return;
+      }
+    }
+    if (state.ui.queueEditorOpen) {
+      if (target.closest(".game-editor-modal__card")) {
+        return;
+      }
+      if (target.closest(".game-editor-modal")) {
+        closeQueueEditor();
+        return;
+      }
+    }
+    if (state.ui.wheelFeelOpen) {
+      if (target.closest(".game-editor-modal__card")) {
+        return;
+      }
+      if (target.closest(".game-editor-modal")) {
+        closeWheelFeel();
+        return;
+      }
+    }
+    if (target.closest(".drawer-card, .drawer-tab")) {
+      return;
+    }
+    closeDrawers();
+  });
+
+  els.viewerChoiceHide.addEventListener("click", () => {
+    state.ui.viewerChoiceHidden = true;
+    render();
+  });
+
+  els.viewerChoiceReopen.addEventListener("click", () => {
+    state.ui.viewerChoiceHidden = false;
     render();
   });
 
@@ -107,32 +296,25 @@ export function bindControllerEvents({
         id: els.gameId.value || undefined,
         title: els.gameTitle.value,
         cover: els.gameCover.value,
-        status: document.getElementById("game-status").value,
-        baseWeight: Number(document.getElementById("game-weight").value),
+        status: els.gameStatus.value,
+        baseWeight: Number(els.gameWeight.value || 1),
         metadataSource: els.gameSource.value,
         metadataId: els.gameSourceId.value,
         metadataSlug: els.gameSourceSlug.value,
         releaseYear: els.gameReleaseYear.value,
       }),
     });
+    try {
+      window.localStorage.setItem(LAST_GAME_STATUS_KEY, els.gameStatus.value || "in");
+    } catch (_) {
+      // Ignore storage failures.
+    }
     els.gameForm.reset();
     clearGameMetadataSelection();
     clearGameSearchResults();
     els.gameSearchStatus.textContent = "Search IGDB by title and pick a match to auto-fill the cover.";
     updateCoverPreview("");
-    await loadAdminState();
-  });
-
-  els.gameDbForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    await request("/api/game-db/settings", {
-      method: "POST",
-      body: JSON.stringify({
-        enabled: els.gameDbEnabled.checked,
-        maxResults: Number(els.gameDbMaxResults.value || 8),
-      }),
-    });
-    setFooterStatus("Game database settings saved");
+    closeGameEditor();
     await loadAdminState();
   });
 
@@ -191,6 +373,7 @@ export function bindControllerEvents({
       }),
     });
     setFooterStatus("Wheel feel updated");
+    closeWheelFeel();
     await loadAdminState();
   });
 
@@ -214,6 +397,12 @@ export function bindControllerEvents({
 
   els.gameCover.addEventListener("input", () => {
     updateCoverPreview(els.gameCover.value);
+  });
+
+  [els.gameStatusIn, els.gameStatusOut].forEach((button) => {
+    button.addEventListener("click", () => {
+      setGameStatus(button.dataset.gameStatusValue);
+    });
   });
 
   const params = new URLSearchParams(window.location.search);

@@ -154,6 +154,16 @@ class DocketState {
     this.store.writeJson("session", session);
   }
 
+  updateSession(patch) {
+    const current = this.getSession();
+    const next = {
+      ...current,
+      ...patch,
+    };
+    this.setSession(next);
+    return next;
+  }
+
   getActiveSpin() {
     const session = this.getSession();
     if (!session.activeSpinId) {
@@ -343,7 +353,7 @@ class DocketState {
     const spins = this.getSpins();
     spins.push(spin);
     this.setSpins(spins);
-    this.setSession({ activeSpinId: spin.id });
+    this.updateSession({ activeSpinId: spin.id, pendingChoice: null });
     this.scheduleCountdown(spin.id, countdownMs);
     this.record("spin.countdown_started", { spinId: spin.id });
     return spin;
@@ -392,7 +402,7 @@ class DocketState {
       this.clearTimer(spin.id);
       this.applyWinner(spin);
       this.upsertSpin(spin);
-      this.setSession({ activeSpinId: null });
+      this.updateSession({ activeSpinId: null });
       this.record("spin.completed", { spinId });
       return spin;
     }
@@ -412,7 +422,7 @@ class DocketState {
       this.upsertSpin(spin);
       return spin;
     }
-    return this.completeSpin(spin.id);
+      return this.completeSpin(spin.id);
   }
 
   recoverActiveSpin() {
@@ -458,7 +468,7 @@ class DocketState {
       }
       return;
     }
-    this.setSession({ activeSpinId: null });
+    this.updateSession({ activeSpinId: null });
   }
 
   createImmediateSpin(actionType, queueItem) {
@@ -498,7 +508,7 @@ class DocketState {
     const spins = this.getSpins();
     spins.push(spin);
     this.setSpins(spins);
-    this.setSession({ activeSpinId: spin.id });
+    this.updateSession({ activeSpinId: spin.id, pendingChoice: null });
     this.scheduleReveal(spin.id, Number(this.getWheelConfig().spinDurationMs || 6500));
     return spin;
   }
@@ -551,8 +561,18 @@ class DocketState {
       }
     }
 
-    if ((spin.type === "eliminate" || spin.type === "next_game") && spin.winner.entryKind === "special") {
+    if ((spin.type === "restore" || spin.type === "eliminate" || spin.type === "next_game") && spin.winner.entryKind === "special") {
       const game = games.find((entry) => entry.id === spin.winner.entryId);
+      if (!game && spin.winner.entryId === "special-viewers-choice") {
+        this.updateSession({
+          pendingChoice: {
+            spinId: spin.id,
+            type: spin.type,
+            wheelScope: spin.type === "restore" ? "out" : "in",
+            viewerName: spin.viewerName || "Viewer",
+          },
+        });
+      }
       if (!game && spin.winner.entryId === "special-lock-it-in") {
         const candidates = games.filter((entry) => entry.status === "in");
         if (candidates.length) {
@@ -589,6 +609,55 @@ class DocketState {
         baseWeight: Number(entry.baseWeight || 1),
       }));
     return [...games, ...specials];
+  }
+
+  resolveViewersChoice(gameId) {
+    const session = this.getSession();
+    const pendingChoice = session.pendingChoice;
+    if (!pendingChoice) {
+      throw new Error("No pending viewer choice");
+    }
+    const spin = this.findSpin(pendingChoice.spinId);
+    if (!spin) {
+      throw new Error("Pending spin not found");
+    }
+    const games = this.getGames();
+    const game = games.find((entry) => entry.id === gameId);
+    if (!game) {
+      throw new Error("Game not found");
+    }
+    if (game.status !== pendingChoice.wheelScope) {
+      throw new Error("Selected game is not on the expected side of the docket");
+    }
+
+    spin.winner = {
+      spinSessionId: spin.id,
+      entryKind: "game",
+      entryId: game.id,
+      label: game.title,
+      cover: game.cover || "",
+      coverFallback: game.coverFallback || "",
+      baseWeight: Number(game.baseWeight || 1),
+      bonusWeight: 0,
+      finalWeight: Number(game.baseWeight || 1),
+      selectedByViewerChoice: true,
+    };
+
+    if (spin.type === "restore") {
+      game.status = "in";
+      game.locked = false;
+    }
+    if (spin.type === "eliminate") {
+      if (!game.locked) {
+        game.status = "out";
+      }
+    }
+
+    this.setGames(games);
+    this.upsertSpin(spin);
+    this.updateSession({ pendingChoice: null });
+    this.record("spin.viewers_choice_resolved", { spinId: spin.id, gameId: game.id });
+    return spin;
   }
 
   findSpin(id) {

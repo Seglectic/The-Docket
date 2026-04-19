@@ -235,6 +235,16 @@ function createRouter({
         return;
       }
 
+      if (pathname === "/api/spins/viewers-choice" && req.method === "POST") {
+        auth.requireAuth(req);
+        const body = await readBody(req);
+        const spin = state.resolveViewersChoice(body.gameId);
+        await state.store.whenIdle();
+        broadcaster();
+        jsonResponse(res, 200, spin);
+        return;
+      }
+
       if (pathname === "/api/games" && req.method === "POST") {
         auth.requireAuth(req);
         const body = await readBody(req);

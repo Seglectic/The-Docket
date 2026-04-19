@@ -76,6 +76,22 @@ test("lock it in can win on the in wheel", async () => {
   assert(lockedGame);
 });
 
+test("viewers choice can be resolved to a chosen game after the spin completes", async () => {
+  const { state } = await setup();
+  const item = state.addQueueItem({ viewerName: "Mina", actionType: "restore" });
+  const spin = state.startQueueSpin(item.id);
+  spin.winner = spin.entries.find((entry) => entry.entryId === "special-viewers-choice");
+  spin.status = "reveal";
+  state.upsertSpin(spin);
+  state.completeSpin(spin.id);
+
+  assert.equal(state.getSession().pendingChoice?.spinId, spin.id);
+
+  const resolved = state.resolveViewersChoice("out-1");
+  assert.equal(resolved.winner.entryId, "out-1");
+  assert.equal(state.getSession().pendingChoice, null);
+});
+
 test("completed queue items are removed after spin resolution", async () => {
   const { state } = await setup();
   const item = state.addQueueItem({ viewerName: "Alice", actionType: "restore" });

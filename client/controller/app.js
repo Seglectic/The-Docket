@@ -38,6 +38,9 @@ async function runControllerAction(action, options = {}) {
 function connectSocket() {
   const protocol = location.protocol === "https:" ? "wss" : "ws";
   state.socket = new WebSocket(`${protocol}://${location.host}/ws?client=controller`);
+  state.socket.addEventListener("open", () => {
+    setFooterStatus("", { immediate: true });
+  });
   state.socket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
     if (message.type === "state" && message.payload.admin) {
@@ -46,7 +49,7 @@ function connectSocket() {
     }
   });
   state.socket.addEventListener("close", () => {
-    setFooterStatus("Disconnected. Retrying…");
+    setFooterStatus("Disconnected. Retrying…", { persist: true });
     window.setTimeout(connectSocket, 1500);
   });
 }
@@ -67,10 +70,16 @@ bindControllerEvents({
   connectSocket,
   clearGameMetadataSelection: renderer.clearGameMetadataSelection,
   clearGameSearchResults: renderer.clearGameSearchResults,
+  closeGameEditor: renderer.closeGameEditor,
+  closeQueueEditor: renderer.closeQueueEditor,
+  closeWheelFeel: renderer.closeWheelFeel,
+  openQueueEditor: renderer.openQueueEditor,
   renderWheelFeel: renderer.renderWheelFeel,
   searchGames: renderer.searchGames,
+  setGameStatus: renderer.setGameStatus,
   setFooterStatus,
   updateCoverPreview: renderer.updateCoverPreview,
+  openWheelFeel: renderer.openWheelFeel,
 });
 
 loadAdminState().then(connectSocket).catch(() => {

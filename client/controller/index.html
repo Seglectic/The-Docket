@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>The Docket Controller</title>
+    <link rel="icon" type="image/svg+xml" href="/public/assets/favicon.svg" />
     <link rel="stylesheet" href="/client/controller/styles.css" />
   </head>
   <body>
@@ -24,98 +25,220 @@
             <h1>The Docket Controller</h1>
           </div>
           <div class="actions">
-            <button id="refresh-button" type="button">Refresh</button>
-            <button id="logout-button" type="button">Logout</button>
+            <button id="logout-button" class="logout-button" type="button" title="Logout" aria-label="Logout">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M10 3H6.5A2.5 2.5 0 0 0 4 5.5v13A2.5 2.5 0 0 0 6.5 21H10" />
+                <path d="M14 7l5 5-5 5" />
+                <path d="M19 12H9" />
+              </svg>
+            </button>
           </div>
         </header>
 
-        <section class="grid">
-          <article class="card">
-            <h2>Games</h2>
-            <form id="game-form" class="stack">
-              <input id="game-id" type="hidden" />
-              <input id="game-source" type="hidden" />
-              <input id="game-source-id" type="hidden" />
-              <input id="game-source-slug" type="hidden" />
-              <input id="game-release-year" type="hidden" />
-              <div class="search-field">
-                <input id="game-title" placeholder="Game title" autocomplete="off" required />
-                <div id="game-search-results" class="search-results hidden"></div>
-              </div>
-              <div id="game-search-status" class="muted search-status">Search IGDB by title and pick a match to auto-fill the cover.</div>
-              <input id="game-cover" placeholder="Cover URL (optional)" />
-              <div id="game-cover-preview" class="cover-preview">No cover selected</div>
-              <select id="game-status">
-                <option value="in">In</option>
-                <option value="out">Out</option>
-              </select>
-              <input id="game-weight" type="number" min="1" value="1" />
-              <button type="submit">Save Game</button>
-            </form>
-            <section class="integration-panel stack">
-              <header class="integration-panel__header">
-                <h3>Game Database</h3>
-                <div id="game-db-status" class="muted">Loading setup…</div>
+        <section class="controller-shell">
+          <button id="drawer-backdrop" class="drawer-backdrop hidden" type="button" aria-label="Close open panel"></button>
+
+          <aside id="games-drawer" class="drawer drawer--left">
+            <button
+              id="games-drawer-toggle"
+              class="drawer-tab drawer-tab--left"
+              type="button"
+              aria-expanded="false"
+              aria-controls="games-drawer-panel"
+            >Games</button>
+            <article id="games-drawer-panel" class="card drawer-card">
+              <header class="drawer-card__header">
+                <div>
+                  <h2>Games</h2>
+                </div>
+                <button id="games-drawer-close" class="secondary drawer-close" type="button">Queue</button>
               </header>
-              <div class="integration-links">
-                <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noreferrer">Create Twitch App</a>
-                <a href="https://api-docs.igdb.com/" target="_blank" rel="noreferrer">IGDB Docs</a>
+              <div id="games-list" class="games-grid"></div>
+            </article>
+          </aside>
+
+          <section class="queue-stage">
+            <article class="card queue-card">
+              <header class="queue-card__header">
+                <div>
+                  <p class="eyebrow">Queue</p>
+                  <h2>Redeems</h2>
+                </div>
+                <div id="test-redeem-status" class="test-redeem-inline muted">No test redeem queued yet.</div>
+              </header>
+              <div class="queue-actions">
+                <button id="queue-modal-open" type="button">Add Manual Redeem</button>
+                <button id="test-redeem-button" class="arcade-button" type="button">Test Redeem</button>
               </div>
-              <form id="game-db-form" class="stack">
-                <label class="checkbox-row">
-                  <input id="game-db-enabled" type="checkbox" />
-                  <span>Enable IGDB autocomplete</span>
-                </label>
-                <input id="game-db-max-results" type="number" min="1" max="20" value="8" placeholder="Max results" />
-                <button type="submit">Save Game DB Settings</button>
+              <div id="queue-list" class="queue-list"></div>
+            </article>
+
+            <button id="viewer-choice-reopen" class="viewer-choice-reopen hidden" type="button">Show Viewer Choice</button>
+
+            <section id="viewer-choice-modal" class="viewer-choice-modal hidden">
+              <div class="viewer-choice-modal__card card">
+                <header class="viewer-choice-modal__header">
+                  <div>
+                    <p class="eyebrow">Viewer Choice</p>
+                    <h3 id="viewer-choice-title">Pick the viewer's game</h3>
+                    <p id="viewer-choice-copy" class="muted"></p>
+                  </div>
+                  <button id="viewer-choice-hide" class="secondary" type="button">Hide</button>
+                </header>
+                <div id="viewer-choice-list" class="viewer-choice-grid"></div>
+              </div>
+            </section>
+          </section>
+
+          <aside id="spin-drawer" class="drawer drawer--right">
+            <button
+              id="spin-drawer-toggle"
+              class="drawer-tab drawer-tab--right"
+              type="button"
+              aria-expanded="false"
+              aria-controls="spin-drawer-panel"
+            >Spin Next</button>
+            <article id="spin-drawer-panel" class="card drawer-card">
+              <header class="drawer-card__header">
+                <div>
+                  <h2>Spin</h2>
+                  <p class="muted">Controls for choosing and advancing the main game wheel.</p>
+                </div>
+                <button id="spin-drawer-close" class="secondary drawer-close" type="button">Queue</button>
+              </header>
+              <div class="stack">
+                <button id="next-game-button" type="button">Start Next Game Spin</button>
+                <button id="force-resolve-button" type="button">Force Advance</button>
+              </div>
+              <form id="weight-form" class="stack">
+                <input id="weight-viewer" placeholder="Viewer name" />
+                <select id="weight-target"></select>
+                <input id="weight-delta" type="number" min="1" value="1" />
+                <button type="submit">Add Weight To Active Spin</button>
               </form>
-              <div class="muted">Uses the configured Twitch app credentials from `config.yaml` for IGDB access.</div>
-              <div class="muted">Saved locally on this machine for the controller app. Restart is not required unless you change the app credentials in config.</div>
-            </section>
-            <div id="games-list" class="stack games"></div>
-          </article>
+            </article>
+          </aside>
 
-          <article class="card">
-            <h2>Queue</h2>
-            <form id="queue-form" class="stack">
-              <input id="viewer-name" placeholder="Viewer name" required />
-              <select id="action-type">
-                <option value="restore">Restore</option>
-                <option value="eliminate">Eliminate</option>
-              </select>
-              <input id="user-input" placeholder="Optional note / input" />
-              <button type="submit">Add Manual Redeem</button>
-              <button id="test-redeem-button" class="arcade-button" type="button">Test Redeem</button>
-            </form>
-            <div id="test-redeem-status" class="test-redeem-inline muted">No test redeem queued yet.</div>
-            <div id="queue-list" class="stack"></div>
-          </article>
-
-          <article class="card">
-            <h2>Active Spin</h2>
-            <section class="twitch-panel stack">
-              <div id="twitch-status" class="spin-row"></div>
-              <div class="inline-actions">
-                <button id="connect-twitch-button" type="button">Connect Twitch</button>
-                <button id="disconnect-twitch-button" class="secondary" type="button">Disconnect Twitch</button>
+          <aside id="config-drawer" class="drawer drawer--bottom">
+            <button
+              id="config-drawer-toggle"
+              class="drawer-tab drawer-tab--bottom"
+              type="button"
+              aria-expanded="false"
+              aria-controls="config-drawer-panel"
+            >Config</button>
+            <article id="config-drawer-panel" class="card drawer-card config-drawer-card">
+              <header class="drawer-card__header">
+                <div>
+                  <h2>Config</h2>
+                  <p class="muted">Storage, Twitch, and wheel tuning live here.</p>
+                </div>
+                <button id="config-drawer-close" class="secondary drawer-close" type="button">Queue</button>
+              </header>
+              <div class="config-grid">
+                <section class="config-panel">
+                  <header class="config-panel__header">
+                    <h3>App Storage</h3>
+                  </header>
+                  <div class="storage-widget__summary">
+                    <div class="storage-meter" aria-hidden="true">
+                      <div class="storage-meter__track">
+                        <div id="storage-meter-fill" class="storage-meter__fill"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="storage-widget__detail">
+                    <p id="storage-title" class="eyebrow">App Storage</p>
+                    <strong id="storage-usage-label">--</strong>
+                    <p id="storage-usage-detail" class="muted">Controller data usage</p>
+                    <div id="storage-breakdown" class="storage-breakdown muted"></div>
+                  </div>
+                </section>
+                <section class="config-panel config-panel--twitch">
+                  <header class="config-panel__header">
+                    <h3>Twitch</h3>
+                  </header>
+                  <div id="twitch-status" class="spin-row"></div>
+                  <div class="inline-actions">
+                    <button id="connect-twitch-button" type="button">Connect Twitch</button>
+                    <button id="disconnect-twitch-button" class="secondary" type="button">Disconnect Twitch</button>
+                  </div>
+                </section>
+                <section class="config-panel">
+                  <header class="config-panel__header">
+                    <h3>Wheel Feel</h3>
+                    <div id="wheel-total" class="muted"></div>
+                  </header>
+                  <button id="wheel-feel-open" type="button">Open Wheel Feel</button>
+                </section>
               </div>
-            </section>
-            <div id="active-spin" class="stack"></div>
-            <div class="stack">
-              <button id="next-game-button" type="button">Start Next Game Spin</button>
-              <button id="force-resolve-button" type="button">Force Advance</button>
-            </div>
-            <form id="weight-form" class="stack">
-              <input id="weight-viewer" placeholder="Viewer name" />
-              <select id="weight-target"></select>
-              <input id="weight-delta" type="number" min="1" value="1" />
-              <button type="submit">Add Weight To Active Spin</button>
-            </form>
+            </article>
+          </aside>
 
-            <section class="wheel-feel">
-              <header class="wheel-feel__header">
-                <h3>Wheel Feel</h3>
-                <div id="wheel-total" class="muted"></div>
+          <section id="game-editor-modal" class="game-editor-modal hidden">
+            <div class="game-editor-modal__card card">
+              <header class="game-editor-modal__header">
+                <div>
+                  <p class="eyebrow">Games</p>
+                  <h3 id="game-editor-title">Add Game</h3>
+                </div>
+              </header>
+              <form id="game-form" class="stack">
+                <input id="game-id" type="hidden" />
+                <input id="game-source" type="hidden" />
+                <input id="game-source-id" type="hidden" />
+                <input id="game-source-slug" type="hidden" />
+                <input id="game-release-year" type="hidden" />
+                <input id="game-status" type="hidden" value="in" />
+                <input id="game-weight" type="hidden" value="1" />
+                <div class="search-field">
+                  <input id="game-title" placeholder="Game title" autocomplete="off" required />
+                  <div id="game-search-results" class="search-results hidden"></div>
+                </div>
+                <div id="game-search-status" class="muted search-status">Search IGDB by title and pick a match to auto-fill the cover.</div>
+                <input id="game-cover" placeholder="Cover URL (optional)" />
+                <div class="game-editor-art-row">
+                  <div id="game-cover-preview" class="cover-preview">No cover selected</div>
+                  <div class="game-status-toggle" role="group" aria-label="Game status">
+                    <button id="game-status-in" class="secondary" type="button" data-game-status-value="in">In</button>
+                    <button id="game-status-out" class="secondary" type="button" data-game-status-value="out">Out</button>
+                  </div>
+                </div>
+                <button type="submit">Save Game</button>
+                <button id="game-editor-close" class="secondary" type="button">Close</button>
+              </form>
+            </div>
+          </section>
+
+          <section id="queue-editor-modal" class="game-editor-modal hidden">
+            <div class="game-editor-modal__card card">
+              <header class="game-editor-modal__header">
+                <div>
+                  <p class="eyebrow">Queue</p>
+                  <h3>Add Manual Redeem</h3>
+                </div>
+                <button id="queue-editor-close" class="secondary" type="button">Close</button>
+              </header>
+              <form id="queue-form" class="stack">
+                <input id="viewer-name" placeholder="Viewer name" required />
+                <select id="action-type">
+                  <option value="restore">Restore</option>
+                  <option value="eliminate">Eliminate</option>
+                </select>
+                <input id="user-input" placeholder="Optional note / input" />
+                <button type="submit">Queue Redeem</button>
+              </form>
+            </div>
+          </section>
+
+          <section id="wheel-feel-modal" class="game-editor-modal hidden">
+            <div class="game-editor-modal__card card">
+              <header class="game-editor-modal__header">
+                <div>
+                  <p class="eyebrow">Config</p>
+                  <h3>Wheel Feel</h3>
+                </div>
+                <button id="wheel-feel-close" class="secondary" type="button">Close</button>
               </header>
               <form id="wheel-form" class="stack">
                 <label class="slider-row">
@@ -150,31 +273,9 @@
                 </label>
                 <button type="submit">Save Wheel Feel</button>
               </form>
-            </section>
-          </article>
-        </section>
-
-        <button
-          id="storage-widget"
-          class="storage-widget"
-          type="button"
-          aria-expanded="false"
-          aria-controls="storage-widget-detail"
-        >
-          <div class="storage-widget__summary">
-            <div class="storage-meter" aria-hidden="true">
-              <div class="storage-meter__track">
-                <div id="storage-meter-fill" class="storage-meter__fill"></div>
-              </div>
             </div>
-          </div>
-          <div id="storage-widget-detail" class="storage-widget__detail hidden">
-            <p id="storage-title" class="eyebrow">App Storage</p>
-            <strong id="storage-usage-label">--</strong>
-            <p id="storage-usage-detail" class="muted">Controller data usage</p>
-            <div id="storage-breakdown" class="storage-breakdown muted"></div>
-          </div>
-        </button>
+          </section>
+        </section>
 
         <footer class="controller-footer" aria-live="polite">
           <div

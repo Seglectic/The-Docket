@@ -1,5 +1,6 @@
 const http = require("node:http");
 const { WebSocketServer } = require("ws");
+const { version } = require("../package.json");
 const { loadConfig, ROOT } = require("./config");
 const { createStore } = require("./store-factory");
 const { DocketState } = require("./state");
@@ -57,6 +58,7 @@ async function main() {
   function broadcastState() {
     const adminState = {
       ...state.controllerSnapshot(),
+      appVersion: version,
       connections: getConnectionSummary(),
       gameDatabase: gameDatabase.publicSettings(),
       twitch: {
@@ -87,6 +89,7 @@ async function main() {
     twitchEventSub,
     buildAdminState: () => ({
       ...state.controllerSnapshot(),
+      appVersion: version,
       connections: getConnectionSummary(),
       gameDatabase: gameDatabase.publicSettings(),
       twitch: {
@@ -119,6 +122,7 @@ async function main() {
           public: state.publicSnapshot(),
           admin: {
             ...state.controllerSnapshot(),
+            appVersion: version,
             connections: getConnectionSummary(),
             gameDatabase: gameDatabase.publicSettings(),
             twitch: {

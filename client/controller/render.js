@@ -1,4 +1,5 @@
 import {
+  LAST_GAME_STATUS_KEY,
   coverStyle,
   els,
   escapeHtml,
@@ -11,6 +12,125 @@ import {
 } from "./core.js";
 
 export function createRenderer({ request, loadAdminState, runControllerAction, setFooterStatus }) {
+  const brokenImageMarkup = `
+    <svg class="cover-preview__icon" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="4" y="5" width="16" height="14" rx="2" />
+      <path d="M8 10l2.5 2.5 2-2 3.5 3.5" />
+      <path d="M15.5 8.5h.01" />
+      <path d="M4 5l16 14" />
+    </svg>
+  `;
+
+  function footerBrandText() {
+    const version = state.admin?.appVersion || "0.1.0";
+    return `The Docket v${version} - Seglectic Systems 2026`;
+  }
+
+  function openQueueEditor() {
+    state.ui.queueEditorOpen = true;
+    render();
+    window.setTimeout(() => {
+      els.queueForm.reset();
+      document.getElementById("viewer-name").focus();
+    }, 0);
+  }
+
+  function closeQueueEditor() {
+    state.ui.queueEditorOpen = false;
+    render();
+  }
+
+  function openWheelFeel() {
+    state.ui.wheelFeelOpen = true;
+    render();
+  }
+
+  function closeWheelFeel() {
+    state.ui.wheelFeelOpen = false;
+    render();
+  }
+
+  function persistedGameStatus() {
+    try {
+      const value = window.localStorage.getItem(LAST_GAME_STATUS_KEY);
+      return value === "out" ? "out" : "in";
+    } catch (_) {
+      return "in";
+    }
+  }
+
+  function rememberGameStatus(status) {
+    try {
+      window.localStorage.setItem(LAST_GAME_STATUS_KEY, status === "out" ? "out" : "in");
+    } catch (_) {
+      // Ignore storage failures.
+    }
+  }
+
+  function setGameStatus(status) {
+    const nextStatus = status === "out" ? "out" : "in";
+    els.gameStatus.value = nextStatus;
+    els.gameStatusIn.classList.toggle("is-active", nextStatus === "in");
+    els.gameStatusOut.classList.toggle("is-active", nextStatus === "out");
+    els.gameStatusIn.setAttribute("aria-pressed", String(nextStatus === "in"));
+    els.gameStatusOut.setAttribute("aria-pressed", String(nextStatus === "out"));
+  }
+
+  function openGameEditor(game) {
+    if (game) {
+      els.gameEditorTitle.textContent = "Edit Game";
+      els.gameId.value = game.id;
+      els.gameTitle.value = game.title;
+      els.gameCover.value = game.cover || "";
+      els.gameSource.value = game.metadataSource || "";
+      els.gameSourceId.value = game.metadataId || "";
+      els.gameSourceSlug.value = game.metadataSlug || "";
+      els.gameReleaseYear.value = game.releaseYear || "";
+      setGameStatus(game.status);
+      els.gameWeight.value = game.baseWeight;
+      state.gameLookup.selectedSuggestion = game.metadataId
+        ? {
+            id: game.metadataId,
+            title: game.title,
+            cover: game.cover || "",
+            source: game.metadataSource || "",
+            slug: game.metadataSlug || "",
+            releaseYear: game.releaseYear || null,
+          }
+        : null;
+    } else {
+      els.gameEditorTitle.textContent = "Add Game";
+      els.gameForm.reset();
+      clearGameMetadataSelection();
+      state.gameLookup.selectedSuggestion = null;
+      setGameStatus(persistedGameStatus());
+      els.gameWeight.value = 1;
+      els.gameSearchStatus.textContent = "Search IGDB by title and pick a match to auto-fill the cover.";
+      updateCoverPreview("");
+    }
+    clearGameSearchResults();
+    updateCoverPreview(els.gameCover.value);
+    state.ui.gameEditorOpen = true;
+    render();
+    window.setTimeout(() => {
+      els.gameTitle.focus();
+      els.gameTitle.select();
+    }, 0);
+  }
+
+  function closeGameEditor() {
+    state.ui.gameEditorOpen = false;
+    render();
+  }
+
+  function viewerChoiceGames(pendingChoice) {
+    const scope = pendingChoice?.wheelScope || "in";
+    return state.admin.games
+      .filter((game) => game.status === scope)
+      .slice()
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }
+
   function renderQueue() {
     const queue = state.admin.queue
       .slice()
@@ -63,58 +183,57 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     const spin = state.admin.activeSpin;
     els.nextGameButton.disabled = Boolean(spin || state.pending.nextGame || state.pending.queueStartId);
     els.forceResolveButton.disabled = Boolean(!spin || state.pending.forceResolve);
-    if (!spin) {
-      els.activeSpin.innerHTML = "<p class='muted'>No active spin</p>";
-      els.weightTarget.innerHTML = "";
-      return;
-    }
-
-    const countdown = spin.countdownEndsAt
-      ? Math.max(0, Math.ceil((new Date(spin.countdownEndsAt).getTime() - Date.now()) / 1000))
-      : null;
-
-    els.activeSpin.innerHTML = `
-      <div class="spin-row">
-        <strong>${escapeHtml(spin.type)}</strong>
-        <div class="muted">Status: ${escapeHtml(spin.status)}</div>
-        <div class="muted">Viewer: ${escapeHtml(spin.viewerName || "Streamer")}</div>
-        ${countdown !== null ? `<div>Countdown: ${countdown}s</div>` : ""}
-        ${spin.winner ? `<div>Winner locked: ${escapeHtml(spin.winner.label)}</div>` : ""}
-      </div>
-    `;
-
-    els.weightTarget.innerHTML = spin.entries
-      .map((entry) => `<option value="${entry.entryId}">${escapeHtml(entry.label)} (${entry.finalWeight})</option>`)
-      .join("");
+    const entries = spin?.entries || [];
+    els.weightTarget.innerHTML = entries.length
+      ? entries.map((entry) => `<option value="${entry.entryId}">${escapeHtml(entry.label)} (${entry.finalWeight})</option>`).join("")
+      : `<option value="">No active countdown</option>`;
+    els.weightTarget.disabled = !entries.length;
   }
 
   function renderGames() {
-    const games = state.admin.games
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder);
-    els.gamesList.innerHTML = games
-      .map(
-        (game) => `
-          <div class="game-row">
-            <div class="game-row__media">
-              <div class="game-thumb" style="${coverStyle(game.cover, game.coverFallback)}"></div>
-            </div>
-            <div class="game-row__body">
-            <header>
-              <strong>${escapeHtml(game.title)}</strong>
-              <span>${escapeHtml(game.status)}</span>
-            </header>
-            <div class="muted">Weight: ${game.baseWeight} | Locked: ${game.locked ? "yes" : "no"}${game.releaseYear ? ` | ${game.releaseYear}` : ""}</div>
-            <div class="inline-actions">
-              <button class="secondary" data-edit="${game.id}">Edit</button>
-              <button class="secondary" data-toggle="${game.id}">${game.status === "in" ? "Move Out" : "Move In"}</button>
-              <button class="danger" data-delete="${game.id}">Delete</button>
-            </div>
-            </div>
-          </div>
-        `,
-      )
-      .join("");
+    const games = state.admin.games.slice().sort((a, b) => {
+      if (a.status !== b.status) {
+        return a.status === "in" ? -1 : 1;
+      }
+      return a.title.localeCompare(b.title);
+    });
+    els.gamesList.innerHTML = `
+      ${games
+        .map(
+          (game) => `
+            <article class="game-tile game-tile--${game.status}">
+              <button class="game-tile__button" type="button" data-edit="${game.id}">
+                <div class="game-tile__cover" style="${coverStyle(game.cover, game.coverFallback)}"></div>
+                <div class="game-tile__title">${escapeHtml(game.title)}</div>
+                <div class="game-tile__meta-row">
+                  <span class="game-tile__year muted">${game.releaseYear || ""}</span>
+                </div>
+              </button>
+              <div class="game-tile__actions">
+                <button class="secondary game-tile__chip game-tile__chip--state" type="button" data-toggle="${game.id}">${game.status === "in" ? "IN" : "OUT"}</button>
+                <button class="danger game-tile__chip game-tile__chip--icon" type="button" data-delete="${game.id}" aria-label="Delete game" title="Delete game">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 7h16" />
+                    <path d="M9 4h6" />
+                    <path d="M7 7l1 12h8l1-12" />
+                    <path d="M10 11v5" />
+                    <path d="M14 11v5" />
+                  </svg>
+                </button>
+              </div>
+            </article>
+          `,
+        )
+        .join("")}
+      <button id="game-add-button" class="game-add-tile" type="button" aria-label="Add game">
+        <span class="game-add-tile__plus">+</span>
+        <span>Add Game</span>
+      </button>
+    `;
+
+    els.gamesList.querySelector("#game-add-button")?.addEventListener("click", () => {
+      openGameEditor(null);
+    });
 
     els.gamesList.querySelectorAll("[data-edit]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -122,27 +241,7 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
         if (!game) {
           return;
         }
-        els.gameId.value = game.id;
-        els.gameTitle.value = game.title;
-        els.gameCover.value = game.cover || "";
-        els.gameSource.value = game.metadataSource || "";
-        els.gameSourceId.value = game.metadataId || "";
-        els.gameSourceSlug.value = game.metadataSlug || "";
-        els.gameReleaseYear.value = game.releaseYear || "";
-        document.getElementById("game-status").value = game.status;
-        document.getElementById("game-weight").value = game.baseWeight;
-        updateCoverPreview(els.gameCover.value);
-        clearGameSearchResults();
-        state.gameLookup.selectedSuggestion = game.metadataId
-          ? {
-              id: game.metadataId,
-              title: game.title,
-              cover: game.cover || "",
-              source: game.metadataSource || "",
-              slug: game.metadataSlug || "",
-              releaseYear: game.releaseYear || null,
-            }
-          : null;
+        openGameEditor(game);
       });
     });
 
@@ -171,20 +270,16 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     });
   }
 
-  function renderGameDatabaseSettings() {
-    const settings = state.admin.gameDatabase;
-    if (!settings) {
-      return;
-    }
-    els.gameDbEnabled.checked = Boolean(settings.enabled);
-    els.gameDbMaxResults.value = Number(settings.maxResults || 8);
-    if (settings.configured && settings.credentialSource === "twitchApp") {
-      els.gameDbStatus.textContent = `${settings.enabled ? "Enabled" : "Disabled"} • Using Twitch app credentials from config.yaml`;
-    } else if (settings.configured) {
-      els.gameDbStatus.textContent = `Configured • ${settings.enabled ? "Autocomplete enabled" : "Autocomplete disabled"} • Using IGDB override credentials already saved`;
-    } else {
-      els.gameDbStatus.textContent = "Game lookup is waiting on valid app credentials in config.yaml.";
-    }
+  function renderGameEditor() {
+    els.gameEditorModal.classList.toggle("hidden", !state.ui.gameEditorOpen);
+  }
+
+  function renderQueueEditor() {
+    els.queueEditorModal.classList.toggle("hidden", !state.ui.queueEditorOpen);
+  }
+
+  function renderWheelFeelModal() {
+    els.wheelFeelModal.classList.toggle("hidden", !state.ui.wheelFeelOpen);
   }
 
   function renderTwitch() {
@@ -244,19 +339,17 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     if (!connections) {
       footerDecoders.instances
         .setText("Instances: --")
-        .then(() => footerDecoders.brand.setText("Seglectic Systems"));
+        .then(() => footerDecoders.brand.setText(footerBrandText()));
       return;
     }
     const visibleControllerCount = Math.max(0, connections.controller - 1);
     const visibleTotal = Math.max(0, connections.total - 1);
     footerDecoders.instances
       .setText(`Instances: ${visibleTotal} total • C ${visibleControllerCount} • O ${connections.overlay} • P ${connections.public}`)
-      .then(() => footerDecoders.brand.setText("Seglectic Systems"));
+      .then(() => footerDecoders.brand.setText(footerBrandText()));
   }
 
   function renderStorageUsage() {
-    els.storageWidget.setAttribute("aria-expanded", String(state.ui.storageExpanded));
-    els.storageWidgetDetail.classList.toggle("hidden", !state.ui.storageExpanded);
     const storage = state.admin.storage;
     if (!storage) {
       els.storageUsageLabel.textContent = "--";
@@ -278,6 +371,59 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
       .map((line) => `<span>${escapeHtml(line)}</span>`)
       .join("");
     els.storageMeterFill.style.height = `${percent}%`;
+  }
+
+  function renderViewerChoice() {
+    const pendingChoice = state.admin.session?.pendingChoice || null;
+    const hasPendingChoice = Boolean(pendingChoice);
+    const pendingId = pendingChoice?.spinId || null;
+    if (pendingId !== state.ui.lastPendingChoiceId) {
+      state.ui.lastPendingChoiceId = pendingId;
+      state.ui.viewerChoiceHidden = false;
+    }
+    const isVisible = hasPendingChoice && !state.ui.viewerChoiceHidden;
+    els.viewerChoiceModal.classList.toggle("hidden", !isVisible);
+    els.viewerChoiceReopen.classList.toggle("hidden", !hasPendingChoice || isVisible);
+    if (!hasPendingChoice) {
+      els.viewerChoiceList.innerHTML = "";
+      return;
+    }
+
+    const scopeLabel = pendingChoice.wheelScope === "out" ? "Out wheel" : "In wheel";
+    els.viewerChoiceTitle.textContent = `${pendingChoice.viewerName || "Viewer"} landed on Viewer Choice`;
+    els.viewerChoiceCopy.textContent = `Pick a game from the ${scopeLabel.toLowerCase()} for this ${pendingChoice.type.replaceAll("_", " ")} result.`;
+    const choices = viewerChoiceGames(pendingChoice);
+    els.viewerChoiceList.innerHTML = choices.length
+      ? choices
+          .map(
+            (game) => `
+              <button class="viewer-choice-option" type="button" data-viewer-choice-game="${game.id}">
+                <div class="viewer-choice-option__cover" style="${coverStyle(game.cover, game.coverFallback)}"></div>
+                <strong>${escapeHtml(game.title)}</strong>
+                <span class="muted">${game.releaseYear || "Year unknown"} • Weight ${game.baseWeight}</span>
+              </button>
+            `,
+          )
+          .join("")
+      : `<p class="muted">No games are available on that side of the docket.</p>`;
+
+    els.viewerChoiceList.querySelectorAll("[data-viewer-choice-game]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        state.ui.viewerChoiceHidden = false;
+        await runControllerAction(
+          () => request("/api/spins/viewers-choice", {
+            method: "POST",
+            body: JSON.stringify({
+              gameId: button.dataset.viewerChoiceGame,
+            }),
+          }),
+          {
+            status: "Resolving viewer choice…",
+            successStatus: "Viewer choice resolved",
+          },
+        );
+      });
+    });
   }
 
   function renderGameSearchResults(suggestions) {
@@ -378,11 +524,11 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
   function updateCoverPreview(coverUrl) {
     const trimmed = String(coverUrl || "").trim();
     if (!trimmed) {
-      els.gameCoverPreview.textContent = "No cover selected";
+      els.gameCoverPreview.innerHTML = brokenImageMarkup;
       els.gameCoverPreview.style.backgroundImage = "";
       return;
     }
-    els.gameCoverPreview.textContent = "";
+    els.gameCoverPreview.innerHTML = "";
     els.gameCoverPreview.style.backgroundImage = `url("${trimmed.replaceAll('"', '\\"')}")`;
   }
 
@@ -398,14 +544,28 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     if (!state.admin) {
       return;
     }
+    const anyDrawerOpen = state.ui.gamesDrawerOpen || state.ui.spinDrawerOpen || state.ui.configDrawerOpen;
     els.loginPanel.classList.add("hidden");
     els.app.classList.remove("hidden");
+    els.gamesDrawer.classList.toggle("is-open", state.ui.gamesDrawerOpen);
+    els.spinDrawer.classList.toggle("is-open", state.ui.spinDrawerOpen);
+    els.configDrawer.classList.toggle("is-open", state.ui.configDrawerOpen);
+    els.gamesDrawerToggle.classList.toggle("is-open", state.ui.gamesDrawerOpen);
+    els.spinDrawerToggle.classList.toggle("is-open", state.ui.spinDrawerOpen);
+    els.configDrawerToggle.classList.toggle("is-open", state.ui.configDrawerOpen);
+    els.gamesDrawerToggle.setAttribute("aria-expanded", String(state.ui.gamesDrawerOpen));
+    els.spinDrawerToggle.setAttribute("aria-expanded", String(state.ui.spinDrawerOpen));
+    els.configDrawerToggle.setAttribute("aria-expanded", String(state.ui.configDrawerOpen));
+    els.drawerBackdrop.classList.toggle("hidden", !anyDrawerOpen);
     renderConnections();
     renderStorageUsage();
     renderQueue();
     renderSpin();
     renderGames();
-    renderGameDatabaseSettings();
+    renderViewerChoice();
+    renderGameEditor();
+    renderQueueEditor();
+    renderWheelFeelModal();
     renderWheelFeel();
     renderTwitch();
     updateCoverPreview(els.gameCover.value);
@@ -414,9 +574,16 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
   return {
     clearGameMetadataSelection,
     clearGameSearchResults,
+    closeGameEditor,
+    closeQueueEditor,
+    closeWheelFeel,
+    openQueueEditor,
+    openGameEditor,
+    openWheelFeel,
     render,
     renderWheelFeel,
     searchGames,
+    setGameStatus,
     updateCoverPreview,
   };
 }

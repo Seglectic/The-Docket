@@ -71,7 +71,7 @@ class PostgresStore {
       twitchAuth: { connected: false },
       queue: [],
       spins: [],
-      session: { activeSpinId: null },
+      session: { activeSpinId: null, pendingChoice: null },
     };
 
     const result = await this.pool.query("SELECT key, value FROM docket_state");

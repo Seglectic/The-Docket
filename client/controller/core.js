@@ -2,7 +2,14 @@ export const state = {
   admin: null,
   socket: null,
   ui: {
-    storageExpanded: false,
+    gamesDrawerOpen: false,
+    spinDrawerOpen: false,
+    configDrawerOpen: false,
+    gameEditorOpen: false,
+    queueEditorOpen: false,
+    wheelFeelOpen: false,
+    viewerChoiceHidden: false,
+    lastPendingChoiceId: null,
   },
   pending: {
     nextGame: false,
@@ -17,26 +24,35 @@ export const state = {
   },
 };
 
+export const LAST_GAME_STATUS_KEY = "docket:last-game-status";
+
 export const els = {
   loginPanel: document.getElementById("login-panel"),
   app: document.getElementById("app"),
+  controllerShell: document.querySelector(".controller-shell"),
   loginForm: document.getElementById("login-form"),
   loginError: document.getElementById("login-error"),
   statusLine: document.getElementById("status-line"),
   instanceLine: document.getElementById("instance-line"),
   footerBrand: document.getElementById("footer-brand"),
-  storageWidget: document.getElementById("storage-widget"),
-  storageWidgetDetail: document.getElementById("storage-widget-detail"),
   storageUsageLabel: document.getElementById("storage-usage-label"),
   storageUsageDetail: document.getElementById("storage-usage-detail"),
   storageBreakdown: document.getElementById("storage-breakdown"),
   storageMeterFill: document.getElementById("storage-meter-fill"),
   queueForm: document.getElementById("queue-form"),
   queueList: document.getElementById("queue-list"),
-  activeSpin: document.getElementById("active-spin"),
+  drawerBackdrop: document.getElementById("drawer-backdrop"),
+  gamesDrawer: document.getElementById("games-drawer"),
+  gamesDrawerToggle: document.getElementById("games-drawer-toggle"),
+  gamesDrawerClose: document.getElementById("games-drawer-close"),
+  spinDrawer: document.getElementById("spin-drawer"),
+  spinDrawerToggle: document.getElementById("spin-drawer-toggle"),
+  spinDrawerClose: document.getElementById("spin-drawer-close"),
+  configDrawer: document.getElementById("config-drawer"),
+  configDrawerToggle: document.getElementById("config-drawer-toggle"),
+  configDrawerClose: document.getElementById("config-drawer-close"),
   nextGameButton: document.getElementById("next-game-button"),
   forceResolveButton: document.getElementById("force-resolve-button"),
-  refreshButton: document.getElementById("refresh-button"),
   logoutButton: document.getElementById("logout-button"),
   twitchStatus: document.getElementById("twitch-status"),
   connectTwitchButton: document.getElementById("connect-twitch-button"),
@@ -52,16 +68,31 @@ export const els = {
   gameSearchResults: document.getElementById("game-search-results"),
   gameSearchStatus: document.getElementById("game-search-status"),
   gameCoverPreview: document.getElementById("game-cover-preview"),
-  gameDbForm: document.getElementById("game-db-form"),
-  gameDbEnabled: document.getElementById("game-db-enabled"),
-  gameDbMaxResults: document.getElementById("game-db-max-results"),
-  gameDbStatus: document.getElementById("game-db-status"),
+  gameStatus: document.getElementById("game-status"),
+  gameWeight: document.getElementById("game-weight"),
+  gameStatusIn: document.getElementById("game-status-in"),
+  gameStatusOut: document.getElementById("game-status-out"),
   gamesList: document.getElementById("games-list"),
+  gameEditorModal: document.getElementById("game-editor-modal"),
+  gameEditorTitle: document.getElementById("game-editor-title"),
+  gameEditorClose: document.getElementById("game-editor-close"),
+  queueModalOpen: document.getElementById("queue-modal-open"),
+  queueEditorModal: document.getElementById("queue-editor-modal"),
+  queueEditorClose: document.getElementById("queue-editor-close"),
   weightForm: document.getElementById("weight-form"),
   weightTarget: document.getElementById("weight-target"),
   testRedeemButton: document.getElementById("test-redeem-button"),
   testRedeemStatus: document.getElementById("test-redeem-status"),
+  viewerChoiceModal: document.getElementById("viewer-choice-modal"),
+  viewerChoiceTitle: document.getElementById("viewer-choice-title"),
+  viewerChoiceCopy: document.getElementById("viewer-choice-copy"),
+  viewerChoiceList: document.getElementById("viewer-choice-list"),
+  viewerChoiceHide: document.getElementById("viewer-choice-hide"),
+  viewerChoiceReopen: document.getElementById("viewer-choice-reopen"),
   wheelForm: document.getElementById("wheel-form"),
+  wheelFeelOpen: document.getElementById("wheel-feel-open"),
+  wheelFeelModal: document.getElementById("wheel-feel-modal"),
+  wheelFeelClose: document.getElementById("wheel-feel-close"),
   wheelTotal: document.getElementById("wheel-total"),
   wheelMass: document.getElementById("wheel-mass"),
   launchForce: document.getElementById("launch-force"),
@@ -180,8 +211,17 @@ export const footerDecoders = {
   }),
 };
 
+let footerStatusTimer = null;
+
 export function setFooterStatus(message, options) {
-  footerDecoders.status.setText(message, options);
+  const { persist = false, durationMs = 2800, immediate = false } = options || {};
+  window.clearTimeout(footerStatusTimer);
+  footerDecoders.status.setText(message, { immediate });
+  if (!persist && message) {
+    footerStatusTimer = window.setTimeout(() => {
+      footerDecoders.status.setText("", { immediate: true });
+    }, durationMs);
+  }
 }
 
 export function syncNumericSlider(input, output, value) {

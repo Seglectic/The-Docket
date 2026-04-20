@@ -9,6 +9,7 @@ const { createRouter } = require("./router");
 const { GameDatabaseService } = require("./game-db");
 const { TwitchAuthService } = require("./twitch-auth");
 const { TwitchEventSubService } = require("./twitch-eventsub");
+
 async function main() {
   const config = loadConfig();
   const store = createStore(config);
@@ -18,14 +19,85 @@ async function main() {
   const twitchAuth = new TwitchAuthService(config, store);
   const server = http.createServer();
   const wss = new WebSocketServer({ noServer: true });
+  const lastPayloadByRole = new Map();
+
+  function buildPublicMessage() {
+    return {
+      type: "state",
+      payload: {
+        public: state.publicSnapshot(),
+      },
+    };
+  }
+
+  function buildAdminMessage() {
+    return {
+      type: "state",
+      payload: {
+        admin: {
+          ...state.controllerSnapshot(),
+          appVersion: version,
+          connections: getConnectionSummary(),
+          gameDatabase: gameDatabase.publicSettings(),
+          twitch: {
+            ...twitchAuth.getPublicState(),
+            eventSub: twitchEventSub.getPublicState(),
+          },
+        },
+      },
+    };
+  }
+
+  function buildSerializedPayloads() {
+    return new Map([
+      ["controller", JSON.stringify(buildAdminMessage())],
+      ["overlay", JSON.stringify(buildPublicMessage())],
+      ["public", JSON.stringify(buildPublicMessage())],
+      ["unknown", JSON.stringify(buildPublicMessage())],
+    ]);
+  }
+
+  function payloadChanged(role, nextPayload) {
+    return lastPayloadByRole.get(role) !== nextPayload;
+  }
+
+  function sendPayload(ws, payload) {
+    if (ws.readyState === 1) {
+      ws.send(payload);
+    }
+  }
+
+  function notifyClients() {
+    const payloadsByRole = buildSerializedPayloads();
+    const changedRoles = new Set();
+
+    for (const [role, payload] of payloadsByRole.entries()) {
+      if (payloadChanged(role, payload)) {
+        changedRoles.add(role);
+        lastPayloadByRole.set(role, payload);
+      }
+    }
+
+    for (const client of wss.clients) {
+      if (client.readyState !== 1) {
+        continue;
+      }
+      const role = client.clientRole || "unknown";
+      const payload = payloadsByRole.get(role) || payloadsByRole.get("unknown");
+      if (changedRoles.has(role)) {
+        sendPayload(client, payload);
+      }
+    }
+  }
+
   const twitchEventSub = new TwitchEventSubService(config, twitchAuth, state, {
-    onStateChange: broadcastState,
+    onStateChange: notifyClients,
     onRedemption: (payload) => {
       if (state.hasQueueItemForRedemption(payload.sourceMetadata?.redemptionId)) {
         return null;
       }
       const item = state.addQueueItem(payload);
-      broadcastState();
+      notifyClients();
       return item;
     },
   });
@@ -55,31 +127,6 @@ async function main() {
     return summary;
   }
 
-  function broadcastState() {
-    const adminState = {
-      ...state.controllerSnapshot(),
-      appVersion: version,
-      connections: getConnectionSummary(),
-      gameDatabase: gameDatabase.publicSettings(),
-      twitch: {
-        ...twitchAuth.getPublicState(),
-        eventSub: twitchEventSub.getPublicState(),
-      },
-    };
-    const payload = JSON.stringify({
-      type: "state",
-      payload: {
-        public: state.publicSnapshot(),
-        admin: adminState,
-      },
-    });
-    for (const client of wss.clients) {
-      if (client.readyState === 1) {
-        client.send(payload);
-      }
-    }
-  }
-
   const route = createRouter({
     rootDir: ROOT,
     auth,
@@ -88,16 +135,9 @@ async function main() {
     twitchAuth,
     twitchEventSub,
     buildAdminState: () => ({
-      ...state.controllerSnapshot(),
-      appVersion: version,
-      connections: getConnectionSummary(),
-      gameDatabase: gameDatabase.publicSettings(),
-      twitch: {
-        ...twitchAuth.getPublicState(),
-        eventSub: twitchEventSub.getPublicState(),
-      },
+      ...buildAdminMessage().payload.admin,
     }),
-    broadcaster: broadcastState,
+    broadcaster: notifyClients,
   });
 
   server.on("request", route);
@@ -115,34 +155,18 @@ async function main() {
   });
 
   wss.on("connection", (ws) => {
-    ws.send(
-      JSON.stringify({
-        type: "state",
-        payload: {
-          public: state.publicSnapshot(),
-          admin: {
-            ...state.controllerSnapshot(),
-            appVersion: version,
-            connections: getConnectionSummary(),
-            gameDatabase: gameDatabase.publicSettings(),
-            twitch: {
-              ...twitchAuth.getPublicState(),
-              eventSub: twitchEventSub.getPublicState(),
-            },
-          },
-        },
-      }),
+    lastPayloadByRole.delete(ws.clientRole || "unknown");
+    const payloadsByRole = buildSerializedPayloads();
+    sendPayload(
+      ws,
+      payloadsByRole.get(ws.clientRole || "unknown") || payloadsByRole.get("unknown"),
     );
-    broadcastState();
+    notifyClients();
     ws.on("close", () => {
-      broadcastState();
+      lastPayloadByRole.delete(ws.clientRole || "unknown");
+      notifyClients();
     });
   });
-
-  // Broadcast state changes from async timers without requiring an API request.
-  setInterval(() => {
-    broadcastState();
-  }, 1000);
 
   const port = Number(config.server?.port || 3030);
   const host = config.server?.host || "0.0.0.0";

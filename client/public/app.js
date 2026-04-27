@@ -9,9 +9,14 @@ const appState = {
   data: null,
 };
 
+let socket = null;
+
 function connect() {
+  if (document.hidden || socket) {
+    return;
+  }
   const protocol = location.protocol === "https:" ? "wss" : "ws";
-  const socket = new WebSocket(`${protocol}://${location.host}/ws?client=public`);
+  socket = new WebSocket(`${protocol}://${location.host}/ws?client=public`);
   socket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
     if (message.type === "state" && message.payload.public) {
@@ -20,9 +25,27 @@ function connect() {
     }
   });
   socket.addEventListener("close", () => {
-    window.setTimeout(connect, 1500);
+    socket = null;
+    if (!document.hidden) {
+      window.setTimeout(connect, 1500);
+    }
   });
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    socket?.close();
+  } else {
+    fetch("/api/public-state")
+      .then((res) => res.json())
+      .then((data) => {
+        appState.data = data;
+        render();
+      })
+      .catch(() => {})
+      .finally(() => connect());
+  }
+});
 
 async function bootstrap() {
   const res = await fetch("/api/public-state");

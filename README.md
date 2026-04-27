@@ -1,10 +1,22 @@
 # The Docket
 
-Local-first docket manager for stream wheel spins. One Node.js process serves:
+**The Docket** is a Twitch streamer tool for managing a randomized game selection wheel. Viewers spend channel points to spin a "vote wheel" that either **eliminates** or **restores** games from a tracked list. When the streamer is ready to pick what to play next, they spin the main wheel and the remaining games compete for the slot.
 
-- `http://localhost:3030/controller`
-- `http://localhost:3030/overlay`
-- `http://localhost:3030/public`
+The tool replaces manual spreadsheets and third-party wheel sites with a single self-hosted app that keeps everyone — streamer, viewers, and OBS — in sync.
+
+## Pages
+
+| Page | URL | Audience |
+|---|---|---|
+| Controller | `/controller` | Streamer only (password-protected) |
+| Overlay | `/overlay` | OBS browser source |
+| Public | `/public` | Viewers in browser |
+
+- The **controller** is the streamer's dashboard: add/edit games, manage the queue, trigger spins, tune wheel physics.
+- The **overlay** is a canvas-based animated wheel rendered inside OBS as a browser source.
+- The **public page** shows a live read-only view of which games are in or out.
+
+All three update in real time via WebSocket.
 
 ## Setup
 
@@ -45,7 +57,7 @@ storage:
     ssl: true
 ```
 
-You can also leave `connectionString` blank and rely on `POSTGRES_URL` or `DATABASE_URL`. The app now accepts either automatically.
+You can also leave `connectionString` blank and rely on `POSTGRES_URL` or `DATABASE_URL`. The app accepts either automatically.
 
 ## Google Cloud VM
 
@@ -67,6 +79,21 @@ Notes:
 - If `DATABASE_URL` is present, the app can use Postgres without needing a checked-in `config.yaml`.
 - `npm start` is the default runtime entrypoint for this project.
 - A reverse proxy such as Caddy can expose `/controller`, `/overlay`, and `/public` over HTTPS while the Node app listens on a local port.
+
+## Bandwidth
+
+This app is hosted on a free-tier Google Cloud VM with a hard monthly egress limit. WebSocket traffic must be kept small.
+
+The server only broadcasts when state actually changes (event-driven, not polling). Broadcast messages use per-message deflate compression and carry only the data each client role needs:
+
+- **Controller** messages: games, queue, active spin, session, wheel config, storage summary. Spin history is excluded — it can grow to thousands of entries and the controller UI does not display it.
+- **Public / overlay** messages: games, active spin, last completed spin, wheel config.
+- **Connection count** updates are sent as a separate lightweight `{ type: "connections" }` message so that viewer page loads and OBS reconnects do not trigger a full state broadcast to the controller.
+
+If you are testing and notice bandwidth growing quickly, check:
+1. Whether the OBS browser source is set to refresh frequently.
+2. Whether multiple browser tabs are left open to `/public` (each is a persistent WebSocket connection).
+3. Whether the controller is open in multiple tabs.
 
 ## Live Deploy Flow
 
@@ -94,7 +121,7 @@ The deploy workflow uses these GitHub Actions secrets:
   - `data/spins.json` keeps recent history only and drops older spin sessions.
   - `data/media/covers/` is trimmed automatically with a 512 MB cache ceiling and a per-image size cap.
   - The controller header shows total app storage usage against a 1 GB budget.
-- Remote game cover URLs are now stored as-is. The app no longer downloads and re-hosts cover art during normal game saves.
+- Remote game cover URLs are stored as-is. The app does not download and re-host cover art during normal game saves.
 
 ## Game Lookup
 
@@ -130,7 +157,7 @@ Recommended setup model for this app:
 - Use Twitch OAuth redirect in the controller for the streamer account.
 - Store the resulting user token server-side.
 - Open an EventSub WebSocket session from the server.
-- Subscribe to redemption events for the streamer’s broadcaster ID.
+- Subscribe to redemption events for the streamer's broadcaster ID.
 
 Config fields reserved for this flow live in `config/config.yaml` under `twitch`.
 

@@ -44,7 +44,12 @@ function connectSocket() {
   state.socket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
     if (message.type === "state" && message.payload.admin) {
-      state.admin = message.payload.admin;
+      // Preserve connections — state updates don't include them
+      state.admin = { ...message.payload.admin, connections: state.admin?.connections };
+      render();
+    } else if (message.type === "connections") {
+      if (!state.admin) return;
+      state.admin = { ...state.admin, connections: message.connections };
       render();
     }
   });

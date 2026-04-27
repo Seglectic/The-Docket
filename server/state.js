@@ -13,6 +13,7 @@ class DocketState {
     this.store = store;
     this.config = config;
     this.random = options.random || Math.random;
+    this.onStateChange = options.onStateChange || null;
     this.timers = new Map();
     this.sessions = new Map();
   }
@@ -48,6 +49,7 @@ class DocketState {
     const overrideGame = state.session.overrideGameId
       ? state.games.find((game) => game.id === state.session.overrideGameId) || null
       : null;
+    const assets = this.config.assets || {};
     return {
       games: state.games,
       activeSpin: state.activeSpin,
@@ -55,15 +57,28 @@ class DocketState {
       overrideGame,
       overlayTitle: state.config.overlayTitle,
       wheelConfig: state.config.wheel || {},
+      assets: {
+        restoreSound: assets.restoreSound || "",
+        eliminateSound: assets.eliminateSound || "",
+        nextGameSound: assets.nextGameSound || "",
+      },
     };
   }
 
   controllerSnapshot() {
-    const state = this.snapshot();
+    const wheelConfig = this.getWheelConfig();
     return {
-      ...state,
-      rewards: this.config.rewards || {},
-      assets: this.config.assets || {},
+      games: this.getGames(),
+      queue: this.store.readJson("queue"),
+      activeSpin: this.getActiveSpin(),
+      lastCompletedSpin: this.getLastCompletedSpin(),
+      session: this.store.readJson("session"),
+      wheelConfig,
+      config: {
+        wheel: wheelConfig,
+        features: this.config.features,
+        overlayTitle: wheelConfig.overlayTitle || "The Docket",
+      },
       storage: this.store.getStorageSummary(),
     };
   }
@@ -755,6 +770,7 @@ class DocketState {
       }
       spin.status = "reveal";
       this.upsertSpin(spin);
+      this.onStateChange?.();
       this.scheduleComplete(spinId, Number(this.getWheelConfig().revealDurationMs || 5000));
     }, Math.max(0, delayMs));
     this.timers.set(spinId, timer);
@@ -765,6 +781,7 @@ class DocketState {
     const timer = setTimeout(() => {
       try {
         this.completeSpin(spinId);
+        this.onStateChange?.();
       } catch (error) {
         this.record("spin.error", { spinId, message: error.message });
       }

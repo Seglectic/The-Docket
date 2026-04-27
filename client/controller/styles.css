@@ -706,7 +706,34 @@ body {
 .controller-footer__line {
   color: var(--accent);
   pointer-events: auto;
+}
+
+.conn-stat {
   cursor: help;
+  position: relative;
+}
+
+.conn-stat::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 11, 17, 0.95);
+  color: var(--cyan);
+  border: 1px solid rgba(116, 215, 236, 0.22);
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+
+.conn-stat:hover::after {
+  opacity: 1;
 }
 
 .controller-footer__status {

@@ -97,6 +97,9 @@ function showWinner(spin) {
     <strong>${escapeHtml(spin.winner.label)}</strong>
   `;
   if (state.lastShownWinnerId !== spin.id) {
+    const assets = state.data?.assets || {};
+    const soundKey = spin.revealStyle === "restore" ? "restoreSound" : spin.revealStyle === "eliminate" ? "eliminateSound" : "nextGameSound";
+    playSound(assets[soundKey]);
     state.lastWinnerSpin = structuredClone({
       ...spin,
       entries: (spin.entries || []).map((entry) => ({ ...entry })),
@@ -110,6 +113,13 @@ function showWinner(spin) {
       }
     }, lingerDurationForSpin(spin) + 50);
   }
+}
+
+function playSound(url) {
+  if (!url) return;
+  try {
+    new Audio(url).play().catch(() => {});
+  } catch (_) {}
 }
 
 function hideWinner() {

@@ -383,16 +383,15 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
   function renderConnections() {
     const connections = state.admin.connections;
     if (!connections) {
-      footerDecoders.instances
-        .setText("Instances: --")
-        .then(() => footerDecoders.brand.setText(footerBrandText()));
-      return;
+      els.instanceLine.textContent = "Connections: --";
+    } else {
+      els.instanceLine.innerHTML =
+        `Connections: ${connections.total} total` +
+        ` • <span class="conn-stat" data-tooltip="Controller">C ${connections.controller}</span>` +
+        ` • <span class="conn-stat" data-tooltip="Overlay">O ${connections.overlay}</span>` +
+        ` • <span class="conn-stat" data-tooltip="Public">P ${connections.public}</span>`;
     }
-    const visibleControllerCount = Math.max(0, connections.controller - 1);
-    const visibleTotal = Math.max(0, connections.total - 1);
-    footerDecoders.instances
-      .setText(`Instances: ${visibleTotal} total • C ${visibleControllerCount} • O ${connections.overlay} • P ${connections.public}`)
-      .then(() => footerDecoders.brand.setText(footerBrandText()));
+    footerDecoders.brand.setText(footerBrandText());
   }
 
   function renderStorageUsage() {
@@ -549,7 +548,7 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
       if (state.gameLookup.lastQuery !== trimmed) {
         return;
       }
-      if (!data.enabled) {
+      if (!data.configured) {
         clearGameSearchResults();
         els.gameSearchStatus.textContent = data.message || "Game lookup is currently disabled.";
         return;

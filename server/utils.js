@@ -55,6 +55,9 @@ function setCookie(res, name, value, options = {}) {
   if (options.httpOnly !== false) {
     segments.push("HttpOnly");
   }
+  if (options.secure) {
+    segments.push("Secure");
+  }
   segments.push("Path=/");
   segments.push(`SameSite=${options.sameSite || "Lax"}`);
   if (options.maxAge !== undefined) {

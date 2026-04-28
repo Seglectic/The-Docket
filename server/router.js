@@ -3,6 +3,23 @@ const path = require("node:path");
 const { clearCookie, jsonResponse, readBody, setCookie } = require("./utils");
 const { randomTestRedeem } = require("./generateTest");
 
+// Simple in-memory rate limiter for the login endpoint.
+// 5 attempts per IP per 15-minute window; resets after the window.
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const loginAttempts = new Map();
+
+function checkLoginRateLimit(ip) {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (!entry || now - entry.windowStart > LOGIN_WINDOW_MS) {
+    loginAttempts.set(ip, { windowStart: now, count: 1 });
+    return true;
+  }
+  entry.count += 1;
+  return entry.count <= LOGIN_MAX_ATTEMPTS;
+}
+
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -78,9 +95,14 @@ function createRouter({
       }
 
       if (pathname === "/api/login" && req.method === "POST") {
+        const ip = req.headers["x-forwarded-for"]?.split(",")[0].trim() || req.socket.remoteAddress;
+        if (!checkLoginRateLimit(ip)) {
+          jsonResponse(res, 429, { error: "Too many login attempts. Try again later." });
+          return;
+        }
         const body = await readBody(req);
         const token = auth.login(body.secret);
-        setCookie(res, "docket_session", token, { maxAge: 60 * 60 * 12 });
+        setCookie(res, "docket_session", token, { maxAge: 60 * 60 * 12, secure: true });
         jsonResponse(res, 200, { ok: true });
         return;
       }

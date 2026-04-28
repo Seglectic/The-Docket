@@ -1,7 +1,7 @@
 const crypto = require("node:crypto");
 const { parseCookies } = require("./utils");
 
-const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 class AuthManager {
   constructor(config) {

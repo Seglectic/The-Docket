@@ -102,7 +102,7 @@ function createRouter({
         }
         const body = await readBody(req);
         const token = auth.login(body.secret);
-        setCookie(res, "docket_session", token, { maxAge: 60 * 60 * 12, secure: true });
+        setCookie(res, "docket_session", token, { maxAge: 60 * 60 * 24 * 30, secure: true });
         jsonResponse(res, 200, { ok: true });
         return;
       }

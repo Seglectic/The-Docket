@@ -27,6 +27,7 @@ export const state = {
 export const LAST_GAME_STATUS_KEY = "docket:last-game-status";
 
 export const els = {
+  themeSelect: document.getElementById("theme-select"),
   loginPanel: document.getElementById("login-panel"),
   app: document.getElementById("app"),
   controllerShell: document.querySelector(".controller-shell"),

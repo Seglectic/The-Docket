@@ -6,16 +6,32 @@
     <title>The Docket Controller</title>
     <link rel="icon" type="image/svg+xml" href="/public/assets/favicon.svg?v=0.7.4" />
     <link rel="stylesheet" href="/client/controller/styles.css?v=0.7.4" />
+    <script>
+      const t = localStorage.getItem("docket-theme");
+      if (t) document.documentElement.setAttribute("data-theme", t);
+      document.addEventListener("DOMContentLoaded", () => {
+        const sel = document.getElementById("theme-select");
+        if (sel && t) sel.value = t;
+      });
+    </script>
   </head>
   <body>
     <main class="layout">
-      <section id="login-panel" class="card login-card">
-        <h1 class="login-card__title">The Docket</h1>
-        <form id="login-form" class="login-card__form">
-          <input id="secret" type="password" placeholder="Password" required />
-          <button type="submit">Enter</button>
-        </form>
-        <p id="login-error" class="error"></p>
+      <section id="login-panel" class="login-panel">
+        <h1 class="login-panel__title">The Docket</h1>
+        <div class="login-panel__card card">
+          <form id="login-form" class="login-panel__form">
+            <input id="secret" type="password" placeholder="Password" autocomplete="current-password" required />
+            <button type="submit" class="login-panel__submit" aria-label="Enter">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                <polyline points="10 17 15 12 10 7" />
+                <line x1="15" y1="12" x2="3" y2="12" />
+              </svg>
+            </button>
+          </form>
+        </div>
+        <p id="login-error" class="login-panel__error"></p>
       </section>
 
       <section id="app" class="hidden">
@@ -24,6 +40,15 @@
             <h1>The Docket Controller</h1>
           </div>
           <div class="actions">
+            <select id="theme-select" class="theme-select" title="Theme" aria-label="Theme">
+              <option value="">Midnight</option>
+              <option value="dracula">Dracula</option>
+              <option value="nord">Nord</option>
+              <option value="catppuccin">Catppuccin</option>
+              <option value="tokyonight">Tokyo Night</option>
+              <option value="gruvbox">Gruvbox</option>
+              <option value="onedark">One Dark</option>
+            </select>
             <button id="logout-button" class="logout-button" type="button" title="Logout" aria-label="Logout">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M10 3H6.5A2.5 2.5 0 0 0 4 5.5v13A2.5 2.5 0 0 0 6.5 21H10" />
@@ -40,7 +65,7 @@
           <aside id="games-drawer" class="drawer drawer--left">
             <button
               id="games-drawer-toggle"
-              class="drawer-tab drawer-tab--left"
+              class="drawer-bar drawer-bar--left"
               type="button"
               aria-expanded="false"
               aria-controls="games-drawer-panel"
@@ -92,11 +117,11 @@
           <aside id="spin-drawer" class="drawer drawer--right">
             <button
               id="spin-drawer-toggle"
-              class="drawer-tab drawer-tab--right"
+              class="drawer-bar drawer-bar--right"
               type="button"
               aria-expanded="false"
               aria-controls="spin-drawer-panel"
-            >Spin Next</button>
+            >Spin</button>
             <article id="spin-drawer-panel" class="card drawer-card">
               <header class="drawer-card__header">
                 <div>
@@ -119,13 +144,15 @@
           </aside>
 
           <aside id="config-drawer" class="drawer drawer--bottom">
-            <button
-              id="config-drawer-toggle"
-              class="drawer-tab drawer-tab--bottom"
-              type="button"
-              aria-expanded="false"
-              aria-controls="config-drawer-panel"
-            >Config</button>
+            <div class="bottom-bar" aria-live="polite">
+              <button
+                id="config-drawer-toggle"
+                class="bottom-bar__tab"
+                type="button"
+                aria-expanded="false"
+                aria-controls="config-drawer-panel"
+              ><span class="bottom-bar__label">Config</span><span id="instance-line">Connections: --</span><span class="bottom-bar__right"><span id="status-line" class="controller-footer__status"></span><span id="footer-brand" class="controller-footer__brand"></span></span></button>
+            </div>
             <article id="config-drawer-panel" class="card drawer-card config-drawer-card">
               <header class="drawer-card__header">
                 <div>
@@ -279,11 +306,6 @@
           </section>
         </section>
 
-        <footer class="controller-footer" aria-live="polite">
-          <div id="instance-line" class="controller-footer__line">Connections: --</div>
-          <div id="status-line" class="controller-footer__status"></div>
-          <div id="footer-brand" class="controller-footer__brand"></div>
-        </footer>
 
       </section>
     </main>

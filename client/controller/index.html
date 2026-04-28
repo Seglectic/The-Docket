@@ -40,15 +40,6 @@
             <h1>The Docket Controller</h1>
           </div>
           <div class="actions">
-            <select id="theme-select" class="theme-select" title="Theme" aria-label="Theme">
-              <option value="">Midnight</option>
-              <option value="dracula">Dracula</option>
-              <option value="nord">Nord</option>
-              <option value="catppuccin">Catppuccin</option>
-              <option value="tokyonight">Tokyo Night</option>
-              <option value="gruvbox">Gruvbox</option>
-              <option value="onedark">One Dark</option>
-            </select>
             <button id="logout-button" class="logout-button" type="button" title="Logout" aria-label="Logout">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M10 3H6.5A2.5 2.5 0 0 0 4 5.5v13A2.5 2.5 0 0 0 6.5 21H10" />
@@ -151,7 +142,7 @@
                 type="button"
                 aria-expanded="false"
                 aria-controls="config-drawer-panel"
-              ><span class="bottom-bar__label">Config</span><span id="instance-line">Connections: --</span><span class="bottom-bar__right"><span id="status-line" class="controller-footer__status"></span><span id="footer-brand" class="controller-footer__brand"></span></span></button>
+              ><span class="bottom-bar__left"><span class="bottom-bar__label">Config</span></span><span id="instance-line">Connections: --</span><span class="bottom-bar__right"><span id="status-line" class="controller-footer__status"></span><span id="footer-brand" class="controller-footer__brand"></span></span></button>
             </div>
             <article id="config-drawer-panel" class="card drawer-card config-drawer-card">
               <header class="drawer-card__header">
@@ -196,6 +187,21 @@
                     <div id="wheel-total" class="muted"></div>
                   </header>
                   <button id="wheel-feel-open" type="button">Open Wheel Feel</button>
+                </section>
+                <section class="config-panel">
+                  <header class="config-panel__header">
+                    <h3>Appearance</h3>
+                  </header>
+                  <label class="config-label" for="theme-select">Theme</label>
+                  <select id="theme-select" title="Theme" aria-label="Theme">
+                    <option value="">Midnight</option>
+                    <option value="dracula">Dracula</option>
+                    <option value="nord">Nord</option>
+                    <option value="catppuccin">Catppuccin</option>
+                    <option value="tokyonight">Tokyo Night</option>
+                    <option value="gruvbox">Gruvbox</option>
+                    <option value="onedark">One Dark</option>
+                  </select>
                 </section>
               </div>
             </article>

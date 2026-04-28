@@ -103,6 +103,25 @@
                 <div id="viewer-choice-list" class="viewer-choice-grid"></div>
               </div>
             </section>
+
+            <button id="lock-it-in-reopen" class="viewer-choice-reopen hidden" type="button">Show Lock It In</button>
+
+            <section id="lock-it-in-modal" class="viewer-choice-modal hidden">
+              <div class="viewer-choice-modal__card card">
+                <header class="viewer-choice-modal__header">
+                  <div>
+                    <p class="eyebrow">Lock It In and Re-spin</p>
+                    <h3 id="lock-it-in-title">Pick the game to lock</h3>
+                    <p id="lock-it-in-copy" class="muted"></p>
+                  </div>
+                  <div class="inline-actions">
+                    <button id="lock-it-in-hide-overlay" class="secondary" type="button">Hide Overlay</button>
+                    <button id="lock-it-in-hide" class="secondary" type="button">Hide Panel</button>
+                  </div>
+                </header>
+                <div id="lock-it-in-list" class="viewer-choice-grid"></div>
+              </div>
+            </section>
           </section>
 
           <aside id="spin-drawer" class="drawer drawer--right">
@@ -187,6 +206,17 @@
                     <div id="wheel-total" class="muted"></div>
                   </header>
                   <button id="wheel-feel-open" type="button">Open Wheel Feel</button>
+                </section>
+                <section class="config-panel">
+                  <header class="config-panel__header">
+                    <h3>Special Entries</h3>
+                  </header>
+                  <label class="config-label" for="lock-it-in-cooldown">Lock It In cooldown rounds</label>
+                  <p class="muted" style="font-size:0.8em;margin:0 0 8px">0 = back next round, 1 = skip one extra round, etc.</p>
+                  <div class="inline-actions">
+                    <input id="lock-it-in-cooldown" type="number" min="0" max="20" step="1" value="0" style="width:80px" />
+                    <button id="lock-it-in-cooldown-save" type="button">Save</button>
+                  </div>
                 </section>
                 <section class="config-panel">
                   <header class="config-panel__header">

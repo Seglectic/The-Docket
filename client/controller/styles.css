@@ -647,6 +647,29 @@ body:has(#login-panel:not(.hidden)) {
   stroke-linejoin: round;
 }
 
+.game-tile__chip--lock {
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.game-tile:hover .game-tile__chip--lock,
+.game-tile:focus-within .game-tile__chip--lock {
+  opacity: 1;
+}
+
+.game-tile__chip--lock.is-locked {
+  opacity: 1;
+  background: rgba(218, 165, 32, 0.22);
+  border-color: rgba(218, 165, 32, 0.5);
+  color: #f0c040;
+}
+
+.game-tile--locked {
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(218, 165, 32, 0.35);
+}
+
 .game-add-tile {
   display: grid;
   place-items: center;

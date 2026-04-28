@@ -238,6 +238,34 @@ export function bindControllerEvents({
     render();
   });
 
+  els.lockItInHide.addEventListener("click", () => {
+    state.ui.lockItInHidden = true;
+    render();
+  });
+
+  els.lockItInReopen.addEventListener("click", () => {
+    state.ui.lockItInHidden = false;
+    render();
+  });
+
+  els.lockItInHideOverlay.addEventListener("click", async () => {
+    await runControllerAction(
+      () => request("/api/overlay/hidden", { method: "POST" }),
+      { status: "Toggling overlay…", successStatus: "Overlay toggled" },
+    );
+  });
+
+  els.lockItInCooldownSave.addEventListener("click", async () => {
+    const rounds = Number(els.lockItInCooldown.value || 0);
+    await runControllerAction(
+      () => request("/api/wheel-config", {
+        method: "POST",
+        body: JSON.stringify({ lockItInCooldownRounds: rounds }),
+      }),
+      { status: "Saving cooldown…", successStatus: "Cooldown saved" },
+    );
+  });
+
   els.themeSelect.addEventListener("change", () => {
     const value = els.themeSelect.value;
     if (value) {
@@ -449,6 +477,13 @@ export function bindControllerEvents({
           gameId: isActive ? null : gameId,
         }),
       });
+      await loadAdminState();
+      return;
+    }
+
+    const lockButton = target.closest("[data-toggle-lock]");
+    if (lockButton instanceof HTMLElement) {
+      await request(`/api/games/${lockButton.dataset.toggleLock}/lock`, { method: "POST" });
       await loadAdminState();
       return;
     }

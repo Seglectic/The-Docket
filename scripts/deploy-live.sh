@@ -9,7 +9,7 @@ cd "$APP_DIR"
 
 git fetch origin "$BRANCH"
 git checkout "$BRANCH"
-git pull --ff-only origin "$BRANCH"
+git reset --hard "origin/$BRANCH"
 npm ci --omit=dev
 sudo systemctl restart "$SERVICE_NAME"
 sudo systemctl is-active --quiet "$SERVICE_NAME"

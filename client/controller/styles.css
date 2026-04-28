@@ -166,8 +166,10 @@ body {
   letter-spacing: 0.01em;
 }
 
-/* Login screen is always near-black regardless of active theme */
-body:has(#login-panel:not(.hidden)) {
+/* Login screen is always near-black regardless of active theme.
+   .pre-auth is on <html> from the start and removed by render() after login. */
+html.pre-auth,
+html.pre-auth body {
   background: #09090c;
 }
 

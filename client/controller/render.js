@@ -681,6 +681,7 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     if (!state.admin) {
       return;
     }
+    document.documentElement.classList.remove("pre-auth");
     const anyDrawerOpen = state.ui.gamesDrawerOpen || state.ui.spinDrawerOpen || state.ui.configDrawerOpen;
     els.loginPanel.classList.add("hidden");
     els.app.classList.remove("hidden");

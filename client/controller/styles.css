@@ -32,11 +32,14 @@
 
 body {
   margin: 0;
+  min-height: 100dvh;
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   background:
     radial-gradient(circle at top, rgba(189, 147, 249, 0.1), transparent 34%),
     radial-gradient(circle at bottom right, rgba(255, 121, 198, 0.08), transparent 28%),
     var(--bg);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
   color: var(--text);
   letter-spacing: 0.01em;
 }
@@ -632,6 +635,36 @@ body {
   border-radius: 8px;
   padding: 18px;
   box-shadow: var(--panel-shadow);
+}
+
+.login-card {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(360px, 92vw);
+  padding: 36px 32px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  text-align: center;
+}
+
+.login-card__title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  background: linear-gradient(135deg, var(--accent), var(--pink));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.login-card__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .stack {

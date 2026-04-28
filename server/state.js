@@ -1,4 +1,4 @@
-const { now, pickWeighted, randomId } = require("./utils");
+const { now, pickWeighted, randomId, shuffleEntries } = require("./utils");
 const { deriveWheelProfile } = require("../client/overlay/spin-plan");
 
 const GAME_STATUSES = ["in", "out", "seasonal", "new_release", "queue"];
@@ -13,6 +13,7 @@ class DocketState {
     this.store = store;
     this.config = config;
     this.random = options.random || Math.random;
+    this.onStateChange = options.onStateChange || null;
     this.timers = new Map();
     this.sessions = new Map();
   }
@@ -20,8 +21,43 @@ class DocketState {
   async bootstrap() {
     await this.store.ensure();
     this.ensureWheelConfig();
+    this.migrateSpecialEntries();
     this.cleanupPersistedQueue();
+    this.enforceAtMostOneLock();
     this.recoverActiveSpin();
+  }
+
+  migrateSpecialEntries() {
+    const entries = this.store.readJson("specialEntries");
+    let changed = false;
+    for (const entry of entries) {
+      if (entry.id === "special-viewers-choice" && entry.wheelScope !== "both") {
+        entry.wheelScope = "both";
+        changed = true;
+      }
+      if (entry.id === "special-lock-it-in" && entry.label !== "Lock It In and Re-spin") {
+        entry.label = "Lock It In and Re-spin";
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.store.writeJson("specialEntries", entries);
+    }
+  }
+
+  enforceAtMostOneLock() {
+    const games = this.getGames();
+    const locked = games.filter((g) => g.locked);
+    if (locked.length <= 1) return;
+    // Keep only the first locked game.
+    let kept = false;
+    for (const g of games) {
+      if (g.locked) {
+        if (kept) g.locked = false;
+        else kept = true;
+      }
+    }
+    this.setGames(games);
   }
 
   snapshot() {
@@ -48,6 +84,7 @@ class DocketState {
     const overrideGame = state.session.overrideGameId
       ? state.games.find((game) => game.id === state.session.overrideGameId) || null
       : null;
+    const assets = this.config.assets || {};
     return {
       games: state.games,
       activeSpin: state.activeSpin,
@@ -55,15 +92,30 @@ class DocketState {
       overrideGame,
       overlayTitle: state.config.overlayTitle,
       wheelConfig: state.config.wheel || {},
+      overlayHidden: state.session.overlayHidden || false,
+      assets: {
+        restoreSound: assets.restoreSound || "",
+        eliminateSound: assets.eliminateSound || "",
+        nextGameSound: assets.nextGameSound || "",
+        lockItInSound: assets.lockItInSound || "",
+      },
     };
   }
 
   controllerSnapshot() {
-    const state = this.snapshot();
+    const wheelConfig = this.getWheelConfig();
     return {
-      ...state,
-      rewards: this.config.rewards || {},
-      assets: this.config.assets || {},
+      games: this.getGames(),
+      queue: this.store.readJson("queue"),
+      activeSpin: this.getActiveSpin(),
+      lastCompletedSpin: this.getLastCompletedSpin(),
+      session: this.store.readJson("session"),
+      wheelConfig,
+      config: {
+        wheel: wheelConfig,
+        features: this.config.features,
+        overlayTitle: wheelConfig.overlayTitle || "The Docket",
+      },
       storage: this.store.getStorageSummary(),
     };
   }
@@ -120,6 +172,8 @@ class DocketState {
       ...input,
       countdownSeconds: Number(input.countdownSeconds ?? current.countdownSeconds),
       overlayTitle: input.overlayTitle ?? current.overlayTitle,
+      lockItInCooldownRounds: Number(input.lockItInCooldownRounds ?? current.lockItInCooldownRounds ?? 0),
+      lockItInRevealMs: Number(input.lockItInRevealMs ?? current.lockItInRevealMs ?? 3500),
       physics: {
         ...(current.physics || {}),
         ...(input.physics || {}),
@@ -162,6 +216,9 @@ class DocketState {
     return {
       activeSpinId: session.activeSpinId || null,
       pendingChoice: session.pendingChoice || null,
+      pendingLockItIn: session.pendingLockItIn || null,
+      overlayHidden: session.overlayHidden || false,
+      lockItInCooldownRemaining: Number(session.lockItInCooldownRemaining || 0),
       overrideGameId: session.overrideGameId || null,
     };
   }
@@ -170,6 +227,9 @@ class DocketState {
     this.store.writeJson("session", {
       activeSpinId: session.activeSpinId || null,
       pendingChoice: session.pendingChoice || null,
+      pendingLockItIn: session.pendingLockItIn || null,
+      overlayHidden: session.overlayHidden || false,
+      lockItInCooldownRemaining: Number(session.lockItInCooldownRemaining || 0),
       overrideGameId: session.overrideGameId || null,
     });
   }
@@ -368,9 +428,14 @@ class DocketState {
     }
     const countdownMs = Number(this.getWheelConfig().countdownSeconds || 10) * 1000;
     const games = this.buildEligibleEntries("in");
+    const session = this.getSession();
+    if (session.lockItInCooldownRemaining > 0) {
+      this.updateSession({ lockItInCooldownRemaining: session.lockItInCooldownRemaining - 1 });
+    }
     if (!games.length) {
       throw new Error("No eligible entries available");
     }
+    const shuffled = shuffleEntries(games, this.random);
     const spin = {
       id: randomId("spin"),
       type: "next_game",
@@ -380,7 +445,7 @@ class DocketState {
       triggerQueueItemId: null,
       triggerSource,
       viewerName: "Streamer",
-      entries: games.map((entry) => ({
+      entries: shuffled.map((entry) => ({
         spinSessionId: null,
         entryKind: entry.entryKind,
         entryId: entry.entryId,
@@ -400,7 +465,7 @@ class DocketState {
     const spins = this.getSpins();
     spins.push(spin);
     this.setSpins(spins);
-    this.updateSession({ activeSpinId: spin.id, pendingChoice: null });
+    this.updateSession({ activeSpinId: spin.id, pendingChoice: null, pendingLockItIn: null });
     this.scheduleCountdown(spin.id, countdownMs);
     this.record("spin.countdown_started", { spinId: spin.id });
     return spin;
@@ -521,6 +586,12 @@ class DocketState {
   createImmediateSpin(actionType, queueItem) {
     const wheelScope = actionType === "restore" ? "out" : "in";
     const entries = this.buildEligibleEntries(wheelScope);
+    if (wheelScope === "in") {
+      const session = this.getSession();
+      if (session.lockItInCooldownRemaining > 0) {
+        this.updateSession({ lockItInCooldownRemaining: session.lockItInCooldownRemaining - 1 });
+      }
+    }
     if (!entries.length) {
       throw new Error("No eligible entries available");
     }
@@ -535,6 +606,7 @@ class DocketState {
       finalWeight: entry.baseWeight,
     }));
     const winner = pickWeighted(snapshots, this.random);
+    const displayEntries = shuffleEntries(snapshots, this.random);
     const spin = {
       id: randomId("spin"),
       type: actionType,
@@ -544,7 +616,7 @@ class DocketState {
       triggerQueueItemId: queueItem.id,
       triggerSource: queueItem.source,
       viewerName: queueItem.viewerName,
-      entries: snapshots.map((entry) => ({ ...entry })),
+      entries: displayEntries.map((entry) => ({ ...entry })),
       winner: { ...winner },
       revealStyle: actionType,
     };
@@ -555,7 +627,7 @@ class DocketState {
     const spins = this.getSpins();
     spins.push(spin);
     this.setSpins(spins);
-    this.updateSession({ activeSpinId: spin.id, pendingChoice: null });
+    this.updateSession({ activeSpinId: spin.id, pendingChoice: null, pendingLockItIn: null });
     this.scheduleReveal(spin.id, Number(this.getWheelConfig().spinDurationMs || 6500));
     return spin;
   }
@@ -627,10 +699,16 @@ class DocketState {
         });
       }
       if (!game && spin.winner.entryId === "special-lock-it-in") {
-        const candidates = games.filter((entry) => entry.status === "in");
-        if (candidates.length) {
-          candidates[0].locked = true;
+        const lockable = games.filter((g) => g.status === "in" && !g.locked);
+        if (lockable.length > 0) {
+          this.updateSession({
+            pendingLockItIn: {
+              spinId: spin.id,
+              viewerName: spin.viewerName || "Streamer",
+            },
+          });
         }
+        // If no lockable games, the special entry resolves as a no-op.
       }
     }
 
@@ -641,6 +719,7 @@ class DocketState {
   }
 
   buildEligibleEntries(wheelScope) {
+    const session = this.getSession();
     const games = this.getGames()
       .filter((game) => (wheelScope === "in" || wheelScope === "out") && game.status === wheelScope)
       .map((game) => ({
@@ -649,11 +728,18 @@ class DocketState {
         label: game.title,
         cover: game.cover,
         coverFallback: game.coverFallback || "",
-        baseWeight: Number(game.baseWeight || 1),
+        baseWeight: game.locked
+          ? Math.max(1, Math.ceil(Number(game.baseWeight || 1) * 0.5))
+          : Number(game.baseWeight || 1),
       }));
     const specials = this.store
       .readJson("specialEntries")
-      .filter((entry) => entry.enabled && entry.wheelScope === wheelScope)
+      .filter((entry) => {
+        if (!entry.enabled) return false;
+        if (entry.wheelScope !== wheelScope && entry.wheelScope !== "both") return false;
+        if (entry.id === "special-lock-it-in" && session.lockItInCooldownRemaining > 0) return false;
+        return true;
+      })
       .map((entry) => ({
         entryKind: "special",
         entryId: entry.id,
@@ -719,6 +805,191 @@ class DocketState {
     return spin;
   }
 
+  resolveLockItIn(gameId) {
+    const session = this.getSession();
+    const pendingLockItIn = session.pendingLockItIn;
+    if (!pendingLockItIn) {
+      throw new Error("No pending lock-it-in");
+    }
+    const games = this.getGames();
+    const game = games.find((g) => g.id === gameId);
+    if (!game) {
+      throw new Error("Game not found");
+    }
+    if (game.status !== "in") {
+      throw new Error("Game must be on the in-wheel to lock");
+    }
+    const originalSpin = this.findSpin(pendingLockItIn.spinId);
+
+    for (const g of games) g.locked = false;
+    game.locked = true;
+    this.setGames(games);
+
+    const wheelConfig = this.getWheelConfig();
+    const cooldownRounds = Number(wheelConfig.lockItInCooldownRounds ?? 0);
+    this.updateSession({
+      pendingLockItIn: null,
+      lockItInCooldownRemaining: cooldownRounds + 1,
+    });
+
+    this.record("spin.lock_it_in_resolved", {
+      spinId: pendingLockItIn.spinId,
+      gameId: game.id,
+    });
+
+    this.startLockItInReveal(game, originalSpin);
+  }
+
+  startLockItInReveal(game, originalSpin) {
+    if (this.getActiveSpin()) {
+      throw new Error("A spin is already active");
+    }
+    const spin = {
+      id: randomId("spin"),
+      type: originalSpin ? originalSpin.type : "eliminate",
+      status: "reveal",
+      startedAt: now(),
+      countdownEndsAt: null,
+      triggerQueueItemId: null,
+      triggerSource: "lock_it_in",
+      viewerName: originalSpin ? originalSpin.viewerName : "Streamer",
+      entries: [],
+      winner: {
+        spinSessionId: null,
+        entryKind: "game",
+        entryId: game.id,
+        label: game.title,
+        cover: game.cover || "",
+        coverFallback: game.coverFallback || "",
+        baseWeight: Number(game.baseWeight || 1),
+        bonusWeight: 0,
+        finalWeight: Number(game.baseWeight || 1),
+        lockedByLockItIn: true,
+      },
+      revealStyle: "lock_it_in",
+    };
+    spin.winner.spinSessionId = spin.id;
+
+    const spins = this.getSpins();
+    spins.push(spin);
+    this.setSpins(spins);
+    this.updateSession({ activeSpinId: spin.id });
+
+    const revealMs = Number(this.getWheelConfig().lockItInRevealMs ?? 3500);
+    const timerId = `lock-reveal-${spin.id}`;
+    this.timers.set(timerId, setTimeout(() => {
+      this.timers.delete(timerId);
+      try {
+        const currentSpin = this.findSpin(spin.id);
+        if (currentSpin) {
+          currentSpin.status = "complete";
+          this.upsertSpin(currentSpin);
+        }
+        this.updateSession({ activeSpinId: null });
+        this.record("spin.lock_reveal_completed", { spinId: spin.id });
+        this.startLockItInReSpin(originalSpin);
+        this.onStateChange?.();
+      } catch (error) {
+        this.record("spin.error", { spinId: spin.id, message: error.message });
+        this.updateSession({ activeSpinId: null });
+        this.onStateChange?.();
+      }
+    }, Math.max(500, revealMs)));
+
+    return spin;
+  }
+
+  startLockItInReSpin(originalSpin) {
+    if (this.getActiveSpin()) {
+      throw new Error("A spin is already active");
+    }
+    const actionType = originalSpin?.type === "next_game" ? "eliminate" : (originalSpin?.type || "eliminate");
+    const entries = this.buildEligibleEntries("in");
+    const session = this.getSession();
+    if (session.lockItInCooldownRemaining > 0) {
+      this.updateSession({ lockItInCooldownRemaining: session.lockItInCooldownRemaining - 1 });
+    }
+    if (!entries.length) {
+      throw new Error("No eligible entries available for re-spin");
+    }
+    const snapshots = entries.map((entry) => ({
+      spinSessionId: null,
+      entryKind: entry.entryKind,
+      entryId: entry.entryId,
+      label: entry.label,
+      cover: entry.cover,
+      coverFallback: entry.coverFallback || "",
+      baseWeight: entry.baseWeight,
+      bonusWeight: 0,
+      finalWeight: entry.baseWeight,
+    }));
+    const winner = pickWeighted(snapshots, this.random);
+    const displayEntries = shuffleEntries(snapshots, this.random);
+    const spin = {
+      id: randomId("spin"),
+      type: actionType,
+      status: "spinning",
+      startedAt: now(),
+      countdownEndsAt: null,
+      triggerQueueItemId: null,
+      triggerSource: "lock_it_in_respun",
+      viewerName: originalSpin ? originalSpin.viewerName : "Streamer",
+      entries: displayEntries.map((entry) => ({ ...entry })),
+      winner: { ...winner },
+      revealStyle: actionType,
+    };
+    for (const entry of spin.entries) {
+      entry.spinSessionId = spin.id;
+    }
+    spin.winner.spinSessionId = spin.id;
+    const spins = this.getSpins();
+    spins.push(spin);
+    this.setSpins(spins);
+    this.updateSession({ activeSpinId: spin.id });
+    this.scheduleReveal(spin.id, Number(this.getWheelConfig().spinDurationMs || 6500));
+    this.record("spin.lock_it_in_respun", { spinId: spin.id });
+    return spin;
+  }
+
+  toggleGameLock(gameId) {
+    const games = this.getGames();
+    const game = games.find((g) => g.id === gameId);
+    if (!game) {
+      throw new Error("Game not found");
+    }
+    if (game.status !== "in") {
+      throw new Error("Only in-wheel games can be locked");
+    }
+    if (game.locked) {
+      game.locked = false;
+      this.setGames(games);
+      this.record("game.unlocked", { gameId });
+    } else {
+      for (const g of games) {
+        g.locked = false;
+      }
+      game.locked = true;
+      this.setGames(games);
+      this.record("game.locked", { gameId });
+    }
+    return game;
+  }
+
+  skipLockItIn() {
+    const session = this.getSession();
+    if (!session.pendingLockItIn) {
+      throw new Error("No pending lock-it-in");
+    }
+    this.updateSession({ pendingLockItIn: null });
+    this.record("spin.lock_it_in_skipped", { spinId: session.pendingLockItIn.spinId });
+  }
+
+  toggleOverlayHidden() {
+    const session = this.getSession();
+    this.updateSession({ overlayHidden: !session.overlayHidden });
+    this.record("overlay.visibility_toggled", { overlayHidden: !session.overlayHidden });
+  }
+
   findSpin(id) {
     return this.getSpins().find((entry) => entry.id === id) || null;
   }
@@ -755,6 +1026,7 @@ class DocketState {
       }
       spin.status = "reveal";
       this.upsertSpin(spin);
+      this.onStateChange?.();
       this.scheduleComplete(spinId, Number(this.getWheelConfig().revealDurationMs || 5000));
     }, Math.max(0, delayMs));
     this.timers.set(spinId, timer);
@@ -765,6 +1037,7 @@ class DocketState {
     const timer = setTimeout(() => {
       try {
         this.completeSpin(spinId);
+        this.onStateChange?.();
       } catch (error) {
         this.record("spin.error", { spinId, message: error.message });
       }

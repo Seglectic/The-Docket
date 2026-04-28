@@ -24,7 +24,7 @@ twitch:
       channelPointsCustomRewardRedemptionUpdate: false
       channelPointsAutomaticRewardRedemptionAddV2: false
 gameDatabase:
-  enabled: false
+  enabled: true
   provider: "igdb"
   maxResults: 8
   igdb:

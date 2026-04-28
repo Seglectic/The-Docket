@@ -6,6 +6,7 @@ const resultCard = document.getElementById("result-card");
 const winnerStage = document.getElementById("winner-stage");
 const winnerCoverShell = document.getElementById("winner-cover-shell");
 const winnerCoverArt = document.getElementById("winner-cover-art");
+const stage = document.querySelector(".stage");
 
 const state = {
   data: null,
@@ -26,6 +27,7 @@ const WINNER_LINGER_BY_STYLE_MS = {
   restore: 3200,
   eliminate: 3600,
   next_game: 2600,
+  lock_it_in: 4000,
 };
 
 function connect() {
@@ -72,6 +74,10 @@ function syncAnimation() {
     drawWheel(spin.entries);
     if (state.readyRevealSpinId === spin.id) {
       showWinner(spin);
+    } else if (spin.revealStyle === "lock_it_in" && state.animatingSpinId !== spin.id) {
+      // Lock reveal spin starts at "reveal" — no wheel animation, show winner directly
+      state.readyRevealSpinId = spin.id;
+      showWinner(spin);
     }
   }
 }
@@ -97,6 +103,15 @@ function showWinner(spin) {
     <strong>${escapeHtml(spin.winner.label)}</strong>
   `;
   if (state.lastShownWinnerId !== spin.id) {
+    const assets = state.data?.assets || {};
+    const soundKey = spin.revealStyle === "restore"
+      ? "restoreSound"
+      : spin.revealStyle === "eliminate"
+        ? "eliminateSound"
+        : spin.revealStyle === "lock_it_in"
+          ? "lockItInSound"
+          : "nextGameSound";
+    playSound(assets[soundKey]);
     state.lastWinnerSpin = structuredClone({
       ...spin,
       entries: (spin.entries || []).map((entry) => ({ ...entry })),
@@ -110,6 +125,13 @@ function showWinner(spin) {
       }
     }, lingerDurationForSpin(spin) + 50);
   }
+}
+
+function playSound(url) {
+  if (!url) return;
+  try {
+    new Audio(url).play().catch(() => {});
+  } catch (_) {}
 }
 
 function hideWinner() {
@@ -211,6 +233,7 @@ async function animateToWinner(spin) {
 function render() {
   const active = state.data?.activeSpin;
   streamTitle.textContent = state.data?.overlayTitle || "The Docket";
+  stage.classList.toggle("overlay-hidden", state.data?.overlayHidden === true);
   const lingeringWinner = !active && state.lastWinnerSpin && Date.now() < state.winnerVisibleUntil
     ? state.lastWinnerSpin
     : null;

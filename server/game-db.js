@@ -84,7 +84,6 @@ class GameDatabaseService {
   isConfigured() {
     const settings = this.getSettings();
     return Boolean(
-      settings.enabled &&
       settings.provider === "igdb" &&
       settings.igdb.clientId &&
       settings.igdb.clientSecret &&

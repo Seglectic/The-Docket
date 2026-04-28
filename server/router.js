@@ -3,6 +3,9 @@ const path = require("node:path");
 const { clearCookie, jsonResponse, readBody, setCookie } = require("./utils");
 const { randomTestRedeem } = require("./generateTest");
 
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -37,6 +40,19 @@ function createRouter({
   twitchEventSub = { restart: async () => {}, stop: () => {} },
   buildAdminState = () => state.controllerSnapshot(),
 }) {
+  // Per-instance rate limiter so test routers don't share state.
+  const loginAttempts = new Map();
+  function checkLoginRateLimit(ip) {
+    const now = Date.now();
+    const entry = loginAttempts.get(ip);
+    if (!entry || now - entry.windowStart > LOGIN_WINDOW_MS) {
+      loginAttempts.set(ip, { windowStart: now, count: 1 });
+      return true;
+    }
+    entry.count += 1;
+    return entry.count <= LOGIN_MAX_ATTEMPTS;
+  }
+
   return async function route(req, res) {
     try {
       const url = new URL(req.url, `http://${req.headers.host}`);
@@ -78,9 +94,14 @@ function createRouter({
       }
 
       if (pathname === "/api/login" && req.method === "POST") {
+        const ip = req.headers["x-forwarded-for"]?.split(",")[0].trim() || req.socket?.remoteAddress || "unknown";
+        if (!checkLoginRateLimit(ip)) {
+          jsonResponse(res, 429, { error: "Too many login attempts. Try again later." });
+          return;
+        }
         const body = await readBody(req);
         const token = auth.login(body.secret);
-        setCookie(res, "docket_session", token, { maxAge: 60 * 60 * 12 });
+        setCookie(res, "docket_session", token, { maxAge: 60 * 60 * 24 * 30, secure: true });
         jsonResponse(res, 200, { ok: true });
         return;
       }
@@ -245,6 +266,34 @@ function createRouter({
         return;
       }
 
+      if (pathname === "/api/spins/lock-it-in" && req.method === "POST") {
+        auth.requireAuth(req);
+        const body = await readBody(req);
+        state.resolveLockItIn(body.gameId);
+        await state.store.whenIdle();
+        broadcaster();
+        jsonResponse(res, 200, { ok: true });
+        return;
+      }
+
+      if (pathname === "/api/spins/lock-it-in-skip" && req.method === "POST") {
+        auth.requireAuth(req);
+        state.skipLockItIn();
+        await state.store.whenIdle();
+        broadcaster();
+        jsonResponse(res, 200, { ok: true });
+        return;
+      }
+
+      if (pathname === "/api/overlay/hidden" && req.method === "POST") {
+        auth.requireAuth(req);
+        state.toggleOverlayHidden();
+        await state.store.whenIdle();
+        broadcaster();
+        jsonResponse(res, 200, { overlayHidden: state.getSession().overlayHidden });
+        return;
+      }
+
       if (pathname === "/api/games" && req.method === "POST") {
         auth.requireAuth(req);
         const body = await readBody(req);
@@ -262,6 +311,16 @@ function createRouter({
         await state.store.whenIdle();
         broadcaster();
         jsonResponse(res, 200, { game });
+        return;
+      }
+
+      if (pathname.startsWith("/api/games/") && pathname.endsWith("/lock") && req.method === "POST") {
+        auth.requireAuth(req);
+        const id = pathname.split("/")[3];
+        const game = state.toggleGameLock(id);
+        await state.store.whenIdle();
+        broadcaster();
+        jsonResponse(res, 200, game);
         return;
       }
 

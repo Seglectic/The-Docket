@@ -6,17 +6,32 @@
     <title>The Docket Controller</title>
     <link rel="icon" type="image/svg+xml" href="/public/assets/favicon.svg?v=0.7.4" />
     <link rel="stylesheet" href="/client/controller/styles.css?v=0.7.4" />
+    <script>
+      const t = localStorage.getItem("docket-theme");
+      if (t) document.documentElement.setAttribute("data-theme", t);
+      document.addEventListener("DOMContentLoaded", () => {
+        const sel = document.getElementById("theme-select");
+        if (sel && t) sel.value = t;
+      });
+    </script>
   </head>
   <body>
     <main class="layout">
-      <section id="login-panel" class="card login-card">
-        <h1>The Docket</h1>
-        <p>Controller login</p>
-        <form id="login-form">
-          <input id="secret" type="password" placeholder="Shared secret" required />
-          <button type="submit">Enter Controller</button>
-        </form>
-        <p id="login-error" class="error"></p>
+      <section id="login-panel" class="login-panel">
+        <h1 class="login-panel__title">The Docket</h1>
+        <div class="login-panel__card card">
+          <form id="login-form" class="login-panel__form">
+            <input id="secret" type="password" placeholder="Password" autocomplete="current-password" required />
+            <button type="submit" class="login-panel__submit" aria-label="Enter">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                <polyline points="10 17 15 12 10 7" />
+                <line x1="15" y1="12" x2="3" y2="12" />
+              </svg>
+            </button>
+          </form>
+        </div>
+        <p id="login-error" class="login-panel__error"></p>
       </section>
 
       <section id="app" class="hidden">
@@ -41,7 +56,7 @@
           <aside id="games-drawer" class="drawer drawer--left">
             <button
               id="games-drawer-toggle"
-              class="drawer-tab drawer-tab--left"
+              class="drawer-bar drawer-bar--left"
               type="button"
               aria-expanded="false"
               aria-controls="games-drawer-panel"
@@ -88,16 +103,35 @@
                 <div id="viewer-choice-list" class="viewer-choice-grid"></div>
               </div>
             </section>
+
+            <button id="lock-it-in-reopen" class="viewer-choice-reopen hidden" type="button">Show Lock It In</button>
+
+            <section id="lock-it-in-modal" class="viewer-choice-modal hidden">
+              <div class="viewer-choice-modal__card card">
+                <header class="viewer-choice-modal__header">
+                  <div>
+                    <p class="eyebrow">Lock It In and Re-spin</p>
+                    <h3 id="lock-it-in-title">Pick the game to lock</h3>
+                    <p id="lock-it-in-copy" class="muted"></p>
+                  </div>
+                  <div class="inline-actions">
+                    <button id="lock-it-in-hide-overlay" class="secondary" type="button">Hide Overlay</button>
+                    <button id="lock-it-in-hide" class="secondary" type="button">Hide Panel</button>
+                  </div>
+                </header>
+                <div id="lock-it-in-list" class="viewer-choice-grid"></div>
+              </div>
+            </section>
           </section>
 
           <aside id="spin-drawer" class="drawer drawer--right">
             <button
               id="spin-drawer-toggle"
-              class="drawer-tab drawer-tab--right"
+              class="drawer-bar drawer-bar--right"
               type="button"
               aria-expanded="false"
               aria-controls="spin-drawer-panel"
-            >Spin Next</button>
+            >Spin</button>
             <article id="spin-drawer-panel" class="card drawer-card">
               <header class="drawer-card__header">
                 <div>
@@ -120,13 +154,15 @@
           </aside>
 
           <aside id="config-drawer" class="drawer drawer--bottom">
-            <button
-              id="config-drawer-toggle"
-              class="drawer-tab drawer-tab--bottom"
-              type="button"
-              aria-expanded="false"
-              aria-controls="config-drawer-panel"
-            >Config</button>
+            <div class="bottom-bar" aria-live="polite">
+              <button
+                id="config-drawer-toggle"
+                class="bottom-bar__tab"
+                type="button"
+                aria-expanded="false"
+                aria-controls="config-drawer-panel"
+              ><span class="bottom-bar__left"><span class="bottom-bar__label">Config</span></span><span id="instance-line">Connections: --</span><span class="bottom-bar__right"><span id="status-line" class="controller-footer__status"></span><span id="footer-brand" class="controller-footer__brand"></span></span></button>
+            </div>
             <article id="config-drawer-panel" class="card drawer-card config-drawer-card">
               <header class="drawer-card__header">
                 <div>
@@ -170,6 +206,32 @@
                     <div id="wheel-total" class="muted"></div>
                   </header>
                   <button id="wheel-feel-open" type="button">Open Wheel Feel</button>
+                </section>
+                <section class="config-panel">
+                  <header class="config-panel__header">
+                    <h3>Special Entries</h3>
+                  </header>
+                  <label class="config-label" for="lock-it-in-cooldown">Lock It In cooldown rounds</label>
+                  <p class="muted" style="font-size:0.8em;margin:0 0 8px">0 = back next round, 1 = skip one extra round, etc.</p>
+                  <div class="inline-actions">
+                    <input id="lock-it-in-cooldown" type="number" min="0" max="20" step="1" value="0" style="width:80px" />
+                    <button id="lock-it-in-cooldown-save" type="button">Save</button>
+                  </div>
+                </section>
+                <section class="config-panel">
+                  <header class="config-panel__header">
+                    <h3>Appearance</h3>
+                  </header>
+                  <label class="config-label" for="theme-select">Theme</label>
+                  <select id="theme-select" title="Theme" aria-label="Theme">
+                    <option value="">Midnight</option>
+                    <option value="dracula">Dracula</option>
+                    <option value="nord">Nord</option>
+                    <option value="catppuccin">Catppuccin</option>
+                    <option value="tokyonight">Tokyo Night</option>
+                    <option value="gruvbox">Gruvbox</option>
+                    <option value="onedark">One Dark</option>
+                  </select>
                 </section>
               </div>
             </article>
@@ -280,15 +342,6 @@
           </section>
         </section>
 
-        <footer class="controller-footer" aria-live="polite">
-          <div
-            id="instance-line"
-            class="controller-footer__line"
-            title="Live browser connections to The Docket: total viewers plus controller, overlay, and public page counts."
-          >Instances: --</div>
-          <div id="status-line" class="controller-footer__status"></div>
-          <div id="footer-brand" class="controller-footer__brand"></div>
-        </footer>
 
       </section>
     </main>

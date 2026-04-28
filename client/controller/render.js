@@ -177,7 +177,14 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
   function viewerChoiceGames(pendingChoice) {
     const scope = pendingChoice?.wheelScope || "in";
     return state.admin.games
-      .filter((game) => game.status === scope)
+      .filter((game) => game.status === scope && (scope !== "in" || !game.locked))
+      .slice()
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  function lockItInGames() {
+    return state.admin.games
+      .filter((game) => game.status === "in" && !game.locked)
       .slice()
       .sort((a, b) => a.title.localeCompare(b.title));
   }
@@ -252,7 +259,7 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     });
 
     const renderGameTile = (game) => `
-            <article class="game-tile game-tile--${game.status}${activeOverrideId === game.id ? " game-tile--override-active" : ""}">
+            <article class="game-tile game-tile--${game.status}${activeOverrideId === game.id ? " game-tile--override-active" : ""}${game.locked ? " game-tile--locked" : ""}">
               <button class="game-tile__button" type="button" data-edit="${game.id}">
                 <div class="game-tile__cover" style="${coverStyle(game.cover, game.coverFallback)}"></div>
                 <div class="game-tile__title">${escapeHtml(game.title)}</div>
@@ -275,6 +282,16 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
                   isOverrideEligible(game.status)
                     ? `<button class="secondary game-tile__chip game-tile__chip--override${activeOverrideId === game.id ? " is-active" : ""}" type="button" data-override="${game.id}">
                         ${activeOverrideId === game.id ? "OVERRIDE" : "Override"}
+                      </button>`
+                    : ""
+                }
+                ${
+                  game.status === "in"
+                    ? `<button class="secondary game-tile__chip game-tile__chip--icon game-tile__chip--lock${game.locked ? " is-locked" : ""}" type="button" data-toggle-lock="${game.id}" aria-label="${game.locked ? "Unlock game" : "Lock game"}" title="${game.locked ? "Unlock" : "Lock in"}">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <rect x="3" y="11" width="18" height="11" rx="2"/>
+                          <path d="${game.locked ? "M7 11V7a5 5 0 0 1 10 0v4" : "M7 11V7a5 5 0 0 1 9.9-1"}"/>
+                        </svg>
                       </button>`
                     : ""
                 }
@@ -368,6 +385,10 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     if (!physics || !timings) {
       return;
     }
+    const cooldown = state.admin.wheelConfig?.lockItInCooldownRounds ?? 0;
+    if (document.activeElement !== els.lockItInCooldown) {
+      els.lockItInCooldown.value = cooldown;
+    }
 
     syncNumericSlider(els.wheelMass, els.massOutput, physics.wheelMass);
     syncNumericSlider(els.launchForce, els.launchOutput, physics.launchForce);
@@ -383,16 +404,15 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
   function renderConnections() {
     const connections = state.admin.connections;
     if (!connections) {
-      footerDecoders.instances
-        .setText("Instances: --")
-        .then(() => footerDecoders.brand.setText(footerBrandText()));
-      return;
+      els.instanceLine.textContent = "Connections: --";
+    } else {
+      els.instanceLine.innerHTML =
+        `Connections: ${connections.total} total` +
+        ` • <span class="conn-stat" data-tooltip="Controller">C ${connections.controller}</span>` +
+        ` • <span class="conn-stat" data-tooltip="Overlay">O ${connections.overlay}</span>` +
+        ` • <span class="conn-stat" data-tooltip="Public">P ${connections.public}</span>`;
     }
-    const visibleControllerCount = Math.max(0, connections.controller - 1);
-    const visibleTotal = Math.max(0, connections.total - 1);
-    footerDecoders.instances
-      .setText(`Instances: ${visibleTotal} total • C ${visibleControllerCount} • O ${connections.overlay} • P ${connections.public}`)
-      .then(() => footerDecoders.brand.setText(footerBrandText()));
+    footerDecoders.brand.setText(footerBrandText());
   }
 
   function renderStorageUsage() {
@@ -472,6 +492,77 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     });
   }
 
+  function renderLockItIn() {
+    const pendingLockItIn = state.admin.session?.pendingLockItIn || null;
+    const hasPending = Boolean(pendingLockItIn);
+    const pendingId = pendingLockItIn?.spinId || null;
+    if (pendingId !== state.ui.lastPendingLockItInId) {
+      state.ui.lastPendingLockItInId = pendingId;
+      state.ui.lockItInHidden = false;
+    }
+    const isVisible = hasPending && !state.ui.lockItInHidden;
+    els.lockItInModal.classList.toggle("hidden", !isVisible);
+    els.lockItInReopen.classList.toggle("hidden", !hasPending || isVisible);
+    if (!hasPending) {
+      els.lockItInList.innerHTML = "";
+      return;
+    }
+
+    const overlayHidden = state.admin.session?.overlayHidden || false;
+    els.lockItInHideOverlay.textContent = overlayHidden ? "Show Overlay" : "Hide Overlay";
+    els.lockItInTitle.textContent = `${pendingLockItIn.viewerName || "Streamer"} landed on Lock It In and Re-spin`;
+    els.lockItInCopy.textContent = "Choose which in-wheel game to lock. The wheel will re-spin without this entry.";
+
+    const choices = lockItInGames();
+    const skipButton = `<button class="secondary" type="button" id="lock-it-in-skip" style="margin-top:12px">Skip (No Lock)</button>`;
+    els.lockItInList.innerHTML = choices.length
+      ? choices
+          .map(
+            (game) => `
+              <button class="viewer-choice-option" type="button" data-lock-it-in-game="${game.id}">
+                <div class="viewer-choice-option__cover" style="${coverStyle(game.cover, game.coverFallback)}"></div>
+                <strong>${escapeHtml(game.title)}</strong>
+                <span class="muted">${game.releaseYear || "Year unknown"} • Weight ${game.baseWeight}</span>
+              </button>
+            `,
+          )
+          .join("") + skipButton
+      : `<p class="muted">No unlocked games available to lock.</p>${skipButton}`;
+
+    els.lockItInList.querySelectorAll("[data-lock-it-in-game]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        state.ui.lockItInHidden = false;
+        await runControllerAction(
+          () => request("/api/spins/lock-it-in", {
+            method: "POST",
+            body: JSON.stringify({ gameId: button.dataset.lockItInGame }),
+          }),
+          {
+            status: "Locking in game…",
+            successStatus: "Locked! Re-spinning…",
+          },
+        );
+      });
+    });
+
+    const skipBtn = document.getElementById("lock-it-in-skip");
+    if (skipBtn) {
+      skipBtn.addEventListener("click", async () => {
+        state.ui.lockItInHidden = false;
+        await runControllerAction(
+          () => request("/api/spins/lock-it-in-skip", { method: "POST" }),
+          { status: "Skipping lock…", successStatus: "Skipped" },
+        );
+      });
+    }
+
+    // Sync cooldown input from config
+    const cooldown = state.admin.wheelConfig?.lockItInCooldownRounds ?? 0;
+    if (document.activeElement !== els.lockItInCooldown) {
+      els.lockItInCooldown.value = cooldown;
+    }
+  }
+
   function renderGameSearchResults(suggestions) {
     state.gameLookup.suggestions = suggestions;
     if (!suggestions.length) {
@@ -549,7 +640,7 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
       if (state.gameLookup.lastQuery !== trimmed) {
         return;
       }
-      if (!data.enabled) {
+      if (!data.configured) {
         clearGameSearchResults();
         els.gameSearchStatus.textContent = data.message || "Game lookup is currently disabled.";
         return;
@@ -609,6 +700,7 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     renderSpin();
     renderGames();
     renderViewerChoice();
+    renderLockItIn();
     renderGameEditor();
     renderQueueEditor();
     renderWheelFeelModal();

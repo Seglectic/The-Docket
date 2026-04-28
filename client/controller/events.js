@@ -149,44 +149,6 @@ export function bindControllerEvents({
   els.wheelFeelOpen.addEventListener("click", openWheelFeel);
   els.wheelFeelClose.addEventListener("click", closeWheelFeel);
 
-  els.gamesDrawerToggle.addEventListener("mouseenter", () => {
-    setDrawerPeek("games", true);
-  });
-  els.gamesDrawerToggle.addEventListener("mouseleave", () => {
-    setDrawerPeek("games", false);
-  });
-  els.gamesDrawerToggle.addEventListener("focus", () => {
-    setDrawerPeek("games", true);
-  });
-  els.gamesDrawerToggle.addEventListener("blur", () => {
-    setDrawerPeek("games", false);
-  });
-
-  els.spinDrawerToggle.addEventListener("mouseenter", () => {
-    setDrawerPeek("spin", true);
-  });
-  els.spinDrawerToggle.addEventListener("mouseleave", () => {
-    setDrawerPeek("spin", false);
-  });
-  els.spinDrawerToggle.addEventListener("focus", () => {
-    setDrawerPeek("spin", true);
-  });
-  els.spinDrawerToggle.addEventListener("blur", () => {
-    setDrawerPeek("spin", false);
-  });
-
-  els.configDrawerToggle.addEventListener("mouseenter", () => {
-    setDrawerPeek("config", true);
-  });
-  els.configDrawerToggle.addEventListener("mouseleave", () => {
-    setDrawerPeek("config", false);
-  });
-  els.configDrawerToggle.addEventListener("focus", () => {
-    setDrawerPeek("config", true);
-  });
-  els.configDrawerToggle.addEventListener("blur", () => {
-    setDrawerPeek("config", false);
-  });
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && state.ui.wheelFeelOpen) {
@@ -260,7 +222,7 @@ export function bindControllerEvents({
         return;
       }
     }
-    if (target.closest(".drawer-card, .drawer-tab")) {
+    if (target.closest(".drawer-card, .drawer-bar, .bottom-bar")) {
       return;
     }
     closeDrawers();
@@ -274,6 +236,45 @@ export function bindControllerEvents({
   els.viewerChoiceReopen.addEventListener("click", () => {
     state.ui.viewerChoiceHidden = false;
     render();
+  });
+
+  els.lockItInHide.addEventListener("click", () => {
+    state.ui.lockItInHidden = true;
+    render();
+  });
+
+  els.lockItInReopen.addEventListener("click", () => {
+    state.ui.lockItInHidden = false;
+    render();
+  });
+
+  els.lockItInHideOverlay.addEventListener("click", async () => {
+    await runControllerAction(
+      () => request("/api/overlay/hidden", { method: "POST" }),
+      { status: "Toggling overlay…", successStatus: "Overlay toggled" },
+    );
+  });
+
+  els.lockItInCooldownSave.addEventListener("click", async () => {
+    const rounds = Number(els.lockItInCooldown.value || 0);
+    await runControllerAction(
+      () => request("/api/wheel-config", {
+        method: "POST",
+        body: JSON.stringify({ lockItInCooldownRounds: rounds }),
+      }),
+      { status: "Saving cooldown…", successStatus: "Cooldown saved" },
+    );
+  });
+
+  els.themeSelect.addEventListener("change", () => {
+    const value = els.themeSelect.value;
+    if (value) {
+      document.documentElement.setAttribute("data-theme", value);
+      localStorage.setItem("docket-theme", value);
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+      localStorage.removeItem("docket-theme");
+    }
   });
 
   els.logoutButton.addEventListener("click", async () => {
@@ -476,6 +477,13 @@ export function bindControllerEvents({
           gameId: isActive ? null : gameId,
         }),
       });
+      await loadAdminState();
+      return;
+    }
+
+    const lockButton = target.closest("[data-toggle-lock]");
+    if (lockButton instanceof HTMLElement) {
+      await request(`/api/games/${lockButton.dataset.toggleLock}/lock`, { method: "POST" });
       await loadAdminState();
       return;
     }

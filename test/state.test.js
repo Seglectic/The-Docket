@@ -64,7 +64,7 @@ test("restore spins from out entries only", async () => {
   assert(spin.entries.every((entry) => entry.entryId === "out-1" || entry.entryKind === "special"));
 });
 
-test("lock it in can win on the in wheel", async () => {
+test("lock it in sets pendingLockItIn and resolveLockItIn locks the game", async () => {
   const { state } = await setup();
   const item = state.addQueueItem({ viewerName: "Bob", actionType: "eliminate" });
   const spin = state.startQueueSpin(item.id);
@@ -72,8 +72,13 @@ test("lock it in can win on the in wheel", async () => {
   spin.status = "reveal";
   state.upsertSpin(spin);
   state.completeSpin(spin.id);
-  const lockedGame = state.getGames().find((entry) => entry.locked);
-  assert(lockedGame);
+  assert.equal(state.getSession().pendingLockItIn?.spinId, spin.id);
+  // Resolve — clears timers to avoid async side-effects in test
+  state.resolveLockItIn("in-1");
+  state.timers.forEach((t) => clearTimeout(t));
+  state.timers.clear();
+  const lockedGame = state.getGames().find((entry) => entry.id === "in-1");
+  assert(lockedGame?.locked);
 });
 
 test("viewers choice can be resolved to a chosen game after the spin completes", async () => {

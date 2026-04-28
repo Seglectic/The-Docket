@@ -13,12 +13,14 @@ const { TwitchEventSubService } = require("./twitch-eventsub");
 async function main() {
   const config = loadConfig();
   const store = createStore(config);
-  const state = new DocketState(store, config);
+  const state = new DocketState(store, config, {
+    onStateChange: () => notifyClients(),
+  });
   const auth = new AuthManager(config);
   const gameDatabase = new GameDatabaseService(config, store);
   const twitchAuth = new TwitchAuthService(config, store);
   const server = http.createServer();
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, perMessageDeflate: true });
   const lastPayloadByRole = new Map();
 
   function buildPublicMessage() {
@@ -37,7 +39,6 @@ async function main() {
         admin: {
           ...state.controllerSnapshot(),
           appVersion: version,
-          connections: getConnectionSummary(),
           gameDatabase: gameDatabase.publicSettings(),
           twitch: {
             ...twitchAuth.getPublicState(),
@@ -48,12 +49,22 @@ async function main() {
     };
   }
 
+  function broadcastConnections() {
+    const message = JSON.stringify({ type: "connections", connections: getConnectionSummary() });
+    for (const client of wss.clients) {
+      if (client.readyState === 1 && client.clientRole === "controller") {
+        client.send(message);
+      }
+    }
+  }
+
   function buildSerializedPayloads() {
+    const publicPayload = JSON.stringify(buildPublicMessage());
     return new Map([
       ["controller", JSON.stringify(buildAdminMessage())],
-      ["overlay", JSON.stringify(buildPublicMessage())],
-      ["public", JSON.stringify(buildPublicMessage())],
-      ["unknown", JSON.stringify(buildPublicMessage())],
+      ["overlay", publicPayload],
+      ["public", publicPayload],
+      ["unknown", publicPayload],
     ]);
   }
 
@@ -136,6 +147,7 @@ async function main() {
     twitchEventSub,
     buildAdminState: () => ({
       ...buildAdminMessage().payload.admin,
+      connections: getConnectionSummary(),
     }),
     broadcaster: notifyClients,
   });
@@ -154,17 +166,39 @@ async function main() {
     });
   });
 
+  // Ping all clients every 30s. Browsers respond with a pong automatically.
+  // Clients that miss a pong are terminated so they can cleanly reconnect instead
+  // of sitting as zombie connections that burn bandwidth on reconnect storms.
+  const PING_INTERVAL_MS = 30_000;
+  const pingTimer = setInterval(() => {
+    for (const client of wss.clients) {
+      if (client.isAlive === false) {
+        client.terminate();
+        continue;
+      }
+      client.isAlive = false;
+      client.ping();
+    }
+  }, PING_INTERVAL_MS);
+  wss.on("close", () => clearInterval(pingTimer));
+
   wss.on("connection", (ws) => {
-    lastPayloadByRole.delete(ws.clientRole || "unknown");
+    ws.isAlive = true;
+    ws.on("pong", () => { ws.isAlive = true; });
+    const role = ws.clientRole || "unknown";
     const payloadsByRole = buildSerializedPayloads();
-    sendPayload(
-      ws,
-      payloadsByRole.get(ws.clientRole || "unknown") || payloadsByRole.get("unknown"),
-    );
-    notifyClients();
+    const payload = payloadsByRole.get(role) || payloadsByRole.get("unknown");
+    sendPayload(ws, payload);
+    lastPayloadByRole.set(role, payload);
+    broadcastConnections();
     ws.on("close", () => {
-      lastPayloadByRole.delete(ws.clientRole || "unknown");
-      notifyClients();
+      const anyRemainingOfRole = Array.from(wss.clients).some(
+        (c) => c !== ws && c.readyState === 1 && c.clientRole === role,
+      );
+      if (!anyRemainingOfRole) {
+        lastPayloadByRole.delete(role);
+      }
+      broadcastConnections();
     });
   });
 

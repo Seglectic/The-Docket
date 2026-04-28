@@ -10,6 +10,8 @@ export const state = {
     wheelFeelOpen: false,
     viewerChoiceHidden: false,
     lastPendingChoiceId: null,
+    lockItInHidden: false,
+    lastPendingLockItInId: null,
   },
   pending: {
     nextGame: false,
@@ -27,6 +29,7 @@ export const state = {
 export const LAST_GAME_STATUS_KEY = "docket:last-game-status";
 
 export const els = {
+  themeSelect: document.getElementById("theme-select"),
   loginPanel: document.getElementById("login-panel"),
   app: document.getElementById("app"),
   controllerShell: document.querySelector(".controller-shell"),
@@ -92,6 +95,15 @@ export const els = {
   viewerChoiceList: document.getElementById("viewer-choice-list"),
   viewerChoiceHide: document.getElementById("viewer-choice-hide"),
   viewerChoiceReopen: document.getElementById("viewer-choice-reopen"),
+  lockItInModal: document.getElementById("lock-it-in-modal"),
+  lockItInTitle: document.getElementById("lock-it-in-title"),
+  lockItInCopy: document.getElementById("lock-it-in-copy"),
+  lockItInList: document.getElementById("lock-it-in-list"),
+  lockItInHide: document.getElementById("lock-it-in-hide"),
+  lockItInHideOverlay: document.getElementById("lock-it-in-hide-overlay"),
+  lockItInReopen: document.getElementById("lock-it-in-reopen"),
+  lockItInCooldown: document.getElementById("lock-it-in-cooldown"),
+  lockItInCooldownSave: document.getElementById("lock-it-in-cooldown-save"),
   wheelForm: document.getElementById("wheel-form"),
   wheelFeelOpen: document.getElementById("wheel-feel-open"),
   wheelFeelModal: document.getElementById("wheel-feel-modal"),

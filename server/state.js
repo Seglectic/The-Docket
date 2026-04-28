@@ -21,9 +21,28 @@ class DocketState {
   async bootstrap() {
     await this.store.ensure();
     this.ensureWheelConfig();
+    this.migrateSpecialEntries();
     this.cleanupPersistedQueue();
     this.enforceAtMostOneLock();
     this.recoverActiveSpin();
+  }
+
+  migrateSpecialEntries() {
+    const entries = this.store.readJson("specialEntries");
+    let changed = false;
+    for (const entry of entries) {
+      if (entry.id === "special-viewers-choice" && entry.wheelScope !== "both") {
+        entry.wheelScope = "both";
+        changed = true;
+      }
+      if (entry.id === "special-lock-it-in" && entry.label !== "Lock It In and Re-spin") {
+        entry.label = "Lock It In and Re-spin";
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.store.writeJson("specialEntries", entries);
+    }
   }
 
   enforceAtMostOneLock() {

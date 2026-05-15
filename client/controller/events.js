@@ -364,12 +364,9 @@ export function bindControllerEvents({
 
   ["input", "change"].forEach((eventName) => {
     [
-      els.wheelMass,
-      els.launchForce,
-      els.drag,
-      els.brakeStrength,
-      els.minCruiseMs,
-      els.revealDelayMs,
+      els.launchEnergy,
+      els.friction,
+      els.suspense,
     ].forEach((input) => {
       input.addEventListener(eventName, renderWheelFeel);
     });
@@ -381,12 +378,9 @@ export function bindControllerEvents({
       method: "POST",
       body: JSON.stringify({
         physics: {
-          wheelMass: Number(els.wheelMass.value),
-          launchForce: Number(els.launchForce.value),
-          drag: Number(els.drag.value),
-          brakeStrength: Number(els.brakeStrength.value),
-          minCruiseMs: Number(els.minCruiseMs.value),
-          revealDelayMs: Number(els.revealDelayMs.value),
+          launchEnergy: Number(els.launchEnergy.value),
+          friction: Number(els.friction.value),
+          suspense: Number(els.suspense.value),
         },
       }),
     });

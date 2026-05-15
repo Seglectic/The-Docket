@@ -66,7 +66,9 @@
                 <div>
                   <h2>Games</h2>
                 </div>
-                <button id="games-drawer-close" class="secondary drawer-close" type="button">Queue</button>
+                <button id="games-drawer-close" class="secondary btn-icon" type="button" aria-label="Close Games panel">
+                  <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                </button>
               </header>
               <div id="games-list" class="games-grid"></div>
             </article>
@@ -82,8 +84,14 @@
                 <div id="test-redeem-status" class="test-redeem-inline muted">No test redeem queued yet.</div>
               </header>
               <div class="queue-actions">
-                <button id="queue-modal-open" type="button">Add Manual Redeem</button>
-                <button id="test-redeem-button" class="arcade-button" type="button">Test Redeem</button>
+                <button id="queue-modal-open" type="button" class="btn--icon-text">
+                  <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                  Add Manual Redeem
+                </button>
+                <button id="test-redeem-button" class="arcade-button btn--icon-text" type="button">
+                  <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
+                  Test Redeem
+                </button>
               </div>
               <div id="queue-list" class="queue-list"></div>
             </article>
@@ -98,7 +106,10 @@
                     <h3 id="viewer-choice-title">Pick the viewer's game</h3>
                     <p id="viewer-choice-copy" class="muted"></p>
                   </div>
-                  <button id="viewer-choice-hide" class="secondary" type="button">Hide</button>
+                  <button id="viewer-choice-hide" class="secondary btn--icon-text" type="button">
+                    <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                    Hide
+                  </button>
                 </header>
                 <div id="viewer-choice-list" class="viewer-choice-grid"></div>
               </div>
@@ -115,8 +126,11 @@
                     <p id="lock-it-in-copy" class="muted"></p>
                   </div>
                   <div class="inline-actions">
-                    <button id="lock-it-in-hide-overlay" class="secondary" type="button">Hide Overlay</button>
-                    <button id="lock-it-in-hide" class="secondary" type="button">Hide Panel</button>
+                    <button id="lock-it-in-hide-overlay" class="secondary btn--icon-text" type="button">Hide Overlay</button>
+                    <button id="lock-it-in-hide" class="secondary btn--icon-text" type="button">
+                      <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                      Hide Panel
+                    </button>
                   </div>
                 </header>
                 <div id="lock-it-in-list" class="viewer-choice-grid"></div>
@@ -138,11 +152,19 @@
                   <h2>Spin</h2>
                   <p class="muted">Controls for choosing and advancing the main game wheel.</p>
                 </div>
-                <button id="spin-drawer-close" class="secondary drawer-close" type="button">Queue</button>
+                <button id="spin-drawer-close" class="secondary btn-icon" type="button" aria-label="Close Spin panel">
+                  <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                </button>
               </header>
               <div class="stack">
-                <button id="next-game-button" type="button">Start Next Game Spin</button>
-                <button id="force-resolve-button" type="button">Force Advance</button>
+                <button id="next-game-button" type="button" class="btn--icon-text">
+                  <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+                  Start Next Game Spin
+                </button>
+                <button id="force-resolve-button" type="button" class="btn--icon-text">
+                  <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/></svg>
+                  Force Advance
+                </button>
               </div>
               <form id="weight-form" class="stack">
                 <input id="weight-viewer" placeholder="Viewer name" />
@@ -169,7 +191,9 @@
                   <h2>Config</h2>
                   <p class="muted">Storage, Twitch, and wheel tuning live here.</p>
                 </div>
-                <button id="config-drawer-close" class="secondary drawer-close" type="button">Queue</button>
+                <button id="config-drawer-close" class="secondary btn-icon" type="button" aria-label="Close Config panel">
+                  <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                </button>
               </header>
               <div class="config-grid">
                 <section class="config-panel">
@@ -196,8 +220,14 @@
                   </header>
                   <div id="twitch-status" class="spin-row"></div>
                   <div class="inline-actions">
-                    <button id="connect-twitch-button" type="button">Connect Twitch</button>
-                    <button id="disconnect-twitch-button" class="secondary" type="button">Disconnect Twitch</button>
+                    <button id="connect-twitch-button" type="button" class="btn--icon-text">
+                      <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="16" y1="12" y2="12"/></svg>
+                      Connect Twitch
+                    </button>
+                    <button id="disconnect-twitch-button" class="secondary btn--icon-text" type="button">
+                      <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M9 17H7A5 5 0 0 1 7 7"/><path d="M15 7h2a5 5 0 0 1 5 5"/><line x1="8" x2="12" y1="12" y2="12"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                      Disconnect
+                    </button>
                   </div>
                 </section>
                 <section class="config-panel">
@@ -270,7 +300,9 @@
                   </div>
                 </div>
                 <button type="submit">Save Game</button>
-                <button id="game-editor-close" class="secondary" type="button">Close</button>
+                <button id="game-editor-close" class="secondary btn-icon" type="button" aria-label="Close">
+                  <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                </button>
               </form>
             </div>
           </section>
@@ -282,7 +314,9 @@
                   <p class="eyebrow">Queue</p>
                   <h3>Add Manual Redeem</h3>
                 </div>
-                <button id="queue-editor-close" class="secondary" type="button">Close</button>
+                <button id="queue-editor-close" class="secondary btn-icon" type="button" aria-label="Close">
+                  <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                </button>
               </header>
               <form id="queue-form" class="stack">
                 <input id="viewer-name" placeholder="Viewer name" required />
@@ -303,38 +337,25 @@
                   <p class="eyebrow">Config</p>
                   <h3>Wheel Feel</h3>
                 </div>
-                <button id="wheel-feel-close" class="secondary" type="button">Close</button>
+                <button id="wheel-feel-close" class="secondary btn-icon" type="button" aria-label="Close">
+                  <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                </button>
               </header>
               <form id="wheel-form" class="stack">
                 <label class="slider-row">
-                  <span>Wheel Mass</span>
-                  <strong id="mass-output"></strong>
-                  <input id="wheel-mass" type="range" min="0.7" max="2.5" step="0.05" />
+                  <span>Launch Energy</span>
+                  <strong id="launch-energy-output"></strong>
+                  <input id="launch-energy" type="range" min="0" max="1" step="0.01" />
                 </label>
                 <label class="slider-row">
-                  <span>Launch Force</span>
-                  <strong id="launch-output"></strong>
-                  <input id="launch-force" type="range" min="0.8" max="2.5" step="0.05" />
+                  <span>Friction</span>
+                  <strong id="friction-output"></strong>
+                  <input id="friction" type="range" min="0" max="1" step="0.01" />
                 </label>
                 <label class="slider-row">
-                  <span>Drag</span>
-                  <strong id="drag-output"></strong>
-                  <input id="drag" type="range" min="0.02" max="0.25" step="0.01" />
-                </label>
-                <label class="slider-row">
-                  <span>Brake Strength</span>
-                  <strong id="brake-output"></strong>
-                  <input id="brake-strength" type="range" min="0.8" max="2.0" step="0.05" />
-                </label>
-                <label class="slider-row">
-                  <span>Minimum Cruise</span>
-                  <strong id="cruise-min-output"></strong>
-                  <input id="min-cruise-ms" type="range" min="2500" max="9000" step="100" />
-                </label>
-                <label class="slider-row">
-                  <span>Reveal Delay</span>
-                  <strong id="reveal-output"></strong>
-                  <input id="reveal-delay-ms" type="range" min="900" max="2500" step="50" />
+                  <span>Suspense</span>
+                  <strong id="suspense-output"></strong>
+                  <input id="suspense" type="range" min="0" max="1" step="0.01" />
                 </label>
                 <button type="submit">Save Wheel Feel</button>
               </form>

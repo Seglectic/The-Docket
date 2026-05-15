@@ -150,7 +150,6 @@ class TwitchEventSubService {
 
   async handleMessage(message) {
     const metadata = message.metadata || {};
-    this.session.lastMessageAt = metadata.message_timestamp || new Date().toISOString();
     const messageType = metadata.message_type;
 
     switch (messageType) {
@@ -158,6 +157,7 @@ class TwitchEventSubService {
         this.session.sessionId = message.payload?.session?.id || "";
         this.session.connectedAt = message.payload?.session?.connected_at || new Date().toISOString();
         this.session.reconnectUrl = message.payload?.session?.reconnect_url || "";
+        this.session.lastMessageAt = metadata.message_timestamp || new Date().toISOString();
         this.session.status = "subscribing";
         this.onStateChange();
         await this.syncSubscriptions();
@@ -165,7 +165,7 @@ class TwitchEventSubService {
         this.onStateChange();
         break;
       case "session_keepalive":
-        this.onStateChange();
+        // Nothing changed — don't update state or broadcast
         break;
       case "session_reconnect":
         this.session.reconnectUrl = message.payload?.session?.reconnect_url || "";
@@ -180,6 +180,7 @@ class TwitchEventSubService {
         if (this.seenMessageIds.size > 200) {
           this.seenMessageIds = new Set(Array.from(this.seenMessageIds).slice(-100));
         }
+        this.session.lastMessageAt = metadata.message_timestamp || new Date().toISOString();
         await this.handleNotification(message);
         break;
       case "revocation":

@@ -232,21 +232,18 @@ test("wheel config updates persist physics sliders and recompute derived timings
   const { state } = await setup();
   const updated = state.updateWheelConfig({
     physics: {
-      wheelMass: 1.6,
-      launchForce: 1.8,
-      drag: 0.15,
-      brakeStrength: 1.25,
-      minCruiseMs: 5000,
-      revealDelayMs: 1400,
+      launchEnergy: 0.75,
+      friction: 0.35,
+      suspense: 0.8,
     },
   });
 
-  assert.equal(updated.physics.wheelMass, 1.6);
-  assert.equal(updated.physics.launchForce, 1.8);
-  assert.equal(updated.timings.cruiseMs, 5000);
-  assert.equal(updated.timings.revealDelayMs, 1400);
-  assert(updated.spinDurationMs > 5000);
-  assert.equal(state.getWheelConfig().physics.drag, 0.15);
+  assert.equal(updated.physics.launchEnergy, 0.75);
+  assert.equal(updated.physics.friction, 0.35);
+  assert.equal(updated.physics.suspense, 0.8);
+  assert(updated.timings.glideMs > 0);
+  assert(updated.spinDurationMs > updated.timings.glideMs);
+  assert.equal(state.getWheelConfig().physics.suspense, 0.8);
 });
 
 test("upsertGame persists metadata fields for auto-matched titles", async () => {

@@ -202,7 +202,7 @@ html.pre-auth body {
 .queue-card {
   min-height: calc(100vh - 190px);
   display: grid;
-  gap: 18px;
+  gap: 12px;
   align-content: start;
 }
 
@@ -235,14 +235,14 @@ html.pre-auth body {
 
 .queue-list {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .drawer {
   position: fixed;
   top: 0;
   bottom: var(--bottom-bar-h);
-  width: calc(100vw - 32px);
+  width: 100vw;
   z-index: 24;
   transition: transform 220ms ease;
   pointer-events: none;
@@ -377,10 +377,33 @@ html.pre-auth body {
   margin-top: var(--bottom-bar-h);
 }
 
-.drawer-close {
-  width: auto;
-  min-width: 112px;
+.btn-icon {
+  width: 36px;
+  height: 36px;
+  min-width: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
   align-self: start;
+}
+
+.btn--icon-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.btn-icon svg.icon,
+.btn--icon-text svg.icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .config-drawer-card {
@@ -399,7 +422,7 @@ html.pre-auth body {
   align-content: start;
   min-height: 0;
   padding: 14px;
-  border-radius: 12px;
+  border-radius: 4px;
   background: var(--panel-soft);
   border: 1px solid var(--line);
 }
@@ -426,9 +449,9 @@ html.pre-auth body {
 
 .games-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 16px;
-  margin-top: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
 }
 
 #games-list.games-grid {
@@ -437,7 +460,7 @@ html.pre-auth body {
 }
 
 .games-section + .games-section {
-  margin-top: 24px;
+  margin-top: 16px;
 }
 
 .games-section--divided {
@@ -455,16 +478,17 @@ html.pre-auth body {
 
 .games-section__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 16px;
-  margin-top: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
 }
 
 .game-tile {
   display: grid;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 12px;
+  grid-template-rows: 1fr auto;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 4px;
   border: 1px solid rgba(248, 248, 242, 0.08);
   background: rgba(248, 248, 242, 0.03);
   transition:
@@ -517,7 +541,7 @@ html.pre-auth body {
 
 .game-tile__button {
   display: grid;
-  gap: 10px;
+  gap: 6px;
   padding: 0;
   border-radius: 0;
   background: transparent;
@@ -532,7 +556,7 @@ html.pre-auth body {
 
 .game-tile__cover {
   aspect-ratio: 3 / 4;
-  border-radius: 8px;
+  border-radius: 3px;
   background-color: #171821;
   background-size: cover;
   background-position: center;
@@ -540,29 +564,33 @@ html.pre-auth body {
 }
 
 .game-tile__title {
-  font-size: 0.9rem;
-  line-height: 1.2;
+  font-size: 0.875rem;
+  line-height: 1.25;
   font-weight: 700;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .game-tile__meta-row {
   display: flex;
   justify-content: space-between;
-  align-items: end;
-  gap: 8px;
-  min-height: 1.1rem;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 1rem;
 }
 
 .game-tile__year {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
+  white-space: nowrap;
 }
 
 .game-tile__actions {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 4px;
+  flex-wrap: nowrap;
 }
 
 .game-tile:hover,
@@ -586,13 +614,16 @@ html.pre-auth body {
 
 .game-tile__chip {
   width: auto;
-  padding: 8px 10px;
-  font-size: 0.72rem;
+  padding: 5px 8px;
+  font-size: 0.70rem;
   box-shadow: none;
+  white-space: nowrap;
 }
 
 .game-tile__chip--state {
-  min-width: 58px;
+  flex: 1;
+  min-width: 0;
+  text-align: center;
 }
 
 .game-tile--in .game-tile__chip--state {
@@ -632,16 +663,17 @@ html.pre-auth body {
 }
 
 .game-tile__chip--icon {
-  width: 38px;
-  height: 38px;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
   padding: 0;
   display: grid;
   place-items: center;
 }
 
 .game-tile__chip--icon svg {
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -675,9 +707,10 @@ html.pre-auth body {
 .game-add-tile {
   display: grid;
   place-items: center;
+  align-self: stretch;
   gap: 8px;
-  min-height: 252px;
-  border-radius: 14px;
+  min-height: 180px;
+  border-radius: 4px;
   border: 1px dashed var(--line);
   background: var(--panel-soft);
   color: var(--muted);
@@ -763,7 +796,7 @@ html.pre-auth body {
 
 .viewer-choice-option__cover {
   aspect-ratio: 3 / 4;
-  border-radius: 6px;
+  border-radius: 3px;
   background-color: #171821;
   background-size: cover;
   background-position: center;
@@ -781,7 +814,7 @@ html.pre-auth body {
 .card {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 18px;
   box-shadow: var(--panel-shadow);
 }
@@ -843,7 +876,7 @@ html.pre-auth body {
   flex-shrink: 0;
   width: 34px;
   height: 34px;
-  border-radius: 7px;
+  border-radius: 3px;
   padding: 0;
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -896,7 +929,7 @@ html.pre-auth body {
   width: 52px;
   height: 52px;
   padding: 0;
-  border-radius: 16px;
+  border-radius: 5px;
   display: grid;
   place-items: center;
   background: var(--panel-alt);
@@ -1118,7 +1151,7 @@ input,
 select {
   width: 100%;
   border: 0;
-  border-radius: 4px;
+  border-radius: 3px;
   padding: 12px 14px;
   font: inherit;
 }
@@ -1193,7 +1226,7 @@ button:active {
 .spin-row {
   background: var(--panel-soft);
   padding: 12px;
-  border-radius: 6px;
+  border-radius: 3px;
 }
 
 .game-row {
@@ -1215,7 +1248,7 @@ button:active {
 .game-thumb {
   width: 72px;
   height: 72px;
-  border-radius: 6px;
+  border-radius: 3px;
 }
 
 .game-row__body {
@@ -1314,7 +1347,7 @@ button:active {
   padding: 8px;
   background: #15161d;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 3px;
   box-shadow: 0 18px 32px rgba(0, 0, 0, 0.45);
 }
 
@@ -1339,7 +1372,7 @@ button:active {
 .search-result__cover {
   width: 48px;
   height: 64px;
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 .search-result__body {
@@ -1350,7 +1383,7 @@ button:active {
 .cover-preview {
   min-height: 128px;
   aspect-ratio: 3 / 4;
-  border-radius: 6px;
+  border-radius: 3px;
   display: grid;
   place-items: center;
   color: var(--muted);
@@ -1453,7 +1486,7 @@ button:active {
   }
 
   .drawer {
-    width: calc(100vw - 16px);
+    width: 100vw;
     top: 5vh;
     bottom: 5vh;
   }

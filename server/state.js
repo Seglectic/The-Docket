@@ -146,10 +146,16 @@ class DocketState {
 
   ensureWheelConfig() {
     const current = this.store.readJson("wheelConfig");
+    const hasNewPhysics =
+      current?.physics &&
+      ("launchEnergy" in current.physics ||
+        "friction" in current.physics ||
+        "suspense" in current.physics);
     const needsNormalization =
       !current ||
       !current.physics ||
       !current.timings ||
+      !hasNewPhysics ||
       !Number.isFinite(Number(current.spinDurationMs)) ||
       !Number.isFinite(Number(current.revealDurationMs));
 

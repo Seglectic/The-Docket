@@ -390,12 +390,9 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
       els.lockItInCooldown.value = cooldown;
     }
 
-    syncNumericSlider(els.wheelMass, els.massOutput, physics.wheelMass);
-    syncNumericSlider(els.launchForce, els.launchOutput, physics.launchForce);
-    syncNumericSlider(els.drag, els.dragOutput, physics.drag);
-    syncNumericSlider(els.brakeStrength, els.brakeOutput, physics.brakeStrength);
-    syncMsSlider(els.minCruiseMs, els.cruiseMinOutput, physics.minCruiseMs);
-    syncMsSlider(els.revealDelayMs, els.revealOutput, physics.revealDelayMs);
+    syncNumericSlider(els.launchEnergy, els.launchEnergyOutput, physics.launchEnergy);
+    syncNumericSlider(els.friction, els.frictionOutput, physics.friction);
+    syncNumericSlider(els.suspense, els.suspenseOutput, physics.suspense);
 
     els.wheelTotal.textContent =
       `Motion ${formatMs(state.admin.config.wheel.spinDurationMs)} • Reveal ${formatMs(timings.revealDelayMs)}`;

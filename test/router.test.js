@@ -219,21 +219,19 @@ test("POST /api/wheel-config persists physics slider settings when authenticated
     },
     body: {
       physics: {
-        wheelMass: 1.6,
-        launchForce: 1.8,
-        drag: 0.15,
-        brakeStrength: 1.2,
-        minCruiseMs: 4500,
-        revealDelayMs: 1400,
+        launchEnergy: 0.7,
+        friction: 0.4,
+        suspense: 0.8,
       },
     },
   });
 
   const body = JSON.parse(response.body);
   assert.equal(response.statusCode, 200);
-  assert.equal(body.physics.wheelMass, 1.6);
-  assert.equal(body.timings.cruiseMs, 4500);
-  assert(body.spinDurationMs > 4500);
+  assert.equal(body.physics.launchEnergy, 0.7);
+  assert.equal(body.physics.friction, 0.4);
+  assert.equal(body.physics.suspense, 0.8);
+  assert(body.spinDurationMs > body.timings.glideMs);
 });
 
 test("GET /api/game-db/search requires auth", async () => {

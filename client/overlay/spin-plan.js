@@ -2,16 +2,17 @@
   const TWO_PI = Math.PI * 2;
 
   const DEFAULT_PHYSICS = {
-    wheelMass: 1.2,
-    launchForce: 1.45,
-    drag: 0.12,
-    brakeStrength: 1.1,
-    minCruiseMs: 3800,
-    revealDelayMs: 1200,
+    launchEnergy: 0.55,
+    friction: 0.5,
+    suspense: 0.55,
   };
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
+  }
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
   }
 
   function normalizeAngle(angle) {
@@ -49,32 +50,41 @@
   function deriveWheelProfile(wheelConfig = {}) {
     const inputPhysics = wheelConfig.physics || {};
     const physics = {
-      wheelMass: clamp(Number(inputPhysics.wheelMass ?? DEFAULT_PHYSICS.wheelMass), 0.7, 2.5),
-      launchForce: clamp(Number(inputPhysics.launchForce ?? DEFAULT_PHYSICS.launchForce), 0.8, 2.5),
-      drag: clamp(Number(inputPhysics.drag ?? DEFAULT_PHYSICS.drag), 0.02, 0.25),
-      brakeStrength: clamp(Number(inputPhysics.brakeStrength ?? DEFAULT_PHYSICS.brakeStrength), 0.8, 2.0),
-      minCruiseMs: clamp(Number(inputPhysics.minCruiseMs ?? DEFAULT_PHYSICS.minCruiseMs), 2500, 9000),
-      revealDelayMs: clamp(Number(inputPhysics.revealDelayMs ?? DEFAULT_PHYSICS.revealDelayMs), 900, 2500),
+      launchEnergy: clamp(Number(inputPhysics.launchEnergy ?? DEFAULT_PHYSICS.launchEnergy), 0, 1),
+      friction: clamp(Number(inputPhysics.friction ?? DEFAULT_PHYSICS.friction), 0, 1),
+      suspense: clamp(Number(inputPhysics.suspense ?? DEFAULT_PHYSICS.suspense), 0, 1),
     };
+
+    const windupMs = 900;
+    const snapMs = 440;
+    const glideMs = clamp(
+      5800 + physics.suspense * 3600 + physics.launchEnergy * 2200 - physics.friction * 2400,
+      4000,
+      12000,
+    );
+    const revealDelayMs = Math.round(1100 + physics.suspense * 600);
 
     const timings = {
-      windupMs: clamp(820 + physics.wheelMass * 170, 700, 1450),
-      snapMs: clamp(290 - physics.launchForce * 55 + physics.wheelMass * 45, 140, 360),
-      cruiseMs: physics.minCruiseMs,
-      decelerateMs: clamp(
-        2200 + physics.wheelMass * 850 + physics.drag * 4200 - physics.brakeStrength * 900,
-        1800,
-        5000,
-      ),
-      revealDelayMs: physics.revealDelayMs,
+      windupMs,
+      snapMs,
+      glideMs,
+      revealDelayMs,
     };
 
-    const spinDurationMs = timings.windupMs + timings.snapMs + timings.cruiseMs + timings.decelerateMs;
-    const revealDurationMs = Math.max(3000, timings.revealDelayMs + 1400);
+    const derived = {
+      windupTurns: 0.85,
+      snapTurns: 1.1,
+      minGlideTurns: 6 + Math.round(physics.launchEnergy * 7),
+      decayExponent: lerp(1.5, 2.8, physics.suspense),
+    };
+
+    const spinDurationMs = windupMs + snapMs + glideMs;
+    const revealDurationMs = Math.max(3000, revealDelayMs + 1400);
 
     return {
       physics,
       timings,
+      derived,
       spinDurationMs,
       revealDurationMs,
     };
@@ -100,22 +110,13 @@
     wheelConfig,
   }) {
     const profile = deriveWheelProfile(wheelConfig);
-    const { physics, timings } = profile;
+    const { timings, derived } = profile;
 
-    const windupTurns = 0.72 + physics.wheelMass * 0.18;
-    const snapTurns = 0.95 + physics.launchForce * 0.38;
-    const cruiseTurns = 7.4 + physics.minCruiseMs / 820;
-    const decelerateBaseTurns = 2.35 + physics.wheelMass * 0.42 + physics.drag * 1.5 - physics.brakeStrength * 0.18;
-
-    const windupDistance = -windupTurns * TWO_PI;
-    const snapDistance = snapTurns * TWO_PI;
-    const cruiseDistance = cruiseTurns * TWO_PI;
-    const decelerationBaseDistance = decelerateBaseTurns * TWO_PI;
+    const windupDistance = -derived.windupTurns * TWO_PI;
+    const snapDistance = derived.snapTurns * TWO_PI;
 
     const windupEnd = currentAngle + windupDistance;
     const snapEnd = windupEnd + snapDistance;
-    const cruiseEnd = snapEnd + cruiseDistance;
-    const decelerationBaseEnd = cruiseEnd + decelerationBaseDistance;
 
     const landingAngle = landingAngleForWinner({
       winnerIndex,
@@ -123,18 +124,18 @@
       seedKey,
     });
     const targetAtPointer = normalizeAngle(-Math.PI / 2 - landingAngle);
-    let delta = targetAtPointer - normalizeAngle(decelerationBaseEnd);
-    if (delta < 0) {
-      delta += TWO_PI;
-    }
-    const finalAngle = decelerationBaseEnd + delta;
 
-    const windupExitVelocity = (windupDistance / (timings.windupMs / 1000)) * 1.45;
-    const cruiseVelocity = cruiseDistance / (timings.cruiseMs / 1000);
-    const snapEntryVelocity = windupExitVelocity;
-    const snapExitVelocity = cruiseVelocity;
-    const decelerationEntryVelocity = cruiseVelocity;
-    const decelerationExitVelocity = 0;
+    let landingOffset = targetAtPointer - normalizeAngle(snapEnd);
+    landingOffset = ((landingOffset % TWO_PI) + TWO_PI) % TWO_PI;
+    const minGlideRadians = derived.minGlideTurns * TWO_PI;
+    const glideDistance = minGlideRadians + landingOffset;
+    const finalAngle = snapEnd + glideDistance;
+
+    const decayExponent = derived.decayExponent;
+    const glideSeconds = timings.glideMs / 1000;
+    const peakVelocity = (glideDistance * (decayExponent + 1)) / glideSeconds;
+
+    const windupExitVelocity = (windupDistance / (timings.windupMs / 1000)) * 1.1;
 
     const phases = [
       {
@@ -155,31 +156,21 @@
         durationMs: timings.snapMs,
         startAngle: windupEnd,
         endAngle: snapEnd,
-        startVelocity: snapEntryVelocity,
-        endVelocity: snapExitVelocity,
+        startVelocity: windupExitVelocity,
+        endVelocity: peakVelocity,
         interpolation: "hermite",
       },
       {
-        name: "cruise",
+        name: "glide",
         startMs: timings.windupMs + timings.snapMs,
-        endMs: timings.windupMs + timings.snapMs + timings.cruiseMs,
-        durationMs: timings.cruiseMs,
-        startAngle: snapEnd,
-        endAngle: cruiseEnd,
-        startVelocity: cruiseVelocity,
-        endVelocity: cruiseVelocity,
-        interpolation: "linear",
-      },
-      {
-        name: "decelerate",
-        startMs: timings.windupMs + timings.snapMs + timings.cruiseMs,
         endMs: profile.spinDurationMs,
-        durationMs: timings.decelerateMs,
-        startAngle: cruiseEnd,
+        durationMs: timings.glideMs,
+        startAngle: snapEnd,
         endAngle: finalAngle,
-        startVelocity: decelerationEntryVelocity,
-        endVelocity: decelerationExitVelocity,
-        interpolation: "hermite",
+        startVelocity: peakVelocity,
+        endVelocity: 0,
+        interpolation: "frictionDecay",
+        decayExponent,
       },
     ];
 
@@ -194,7 +185,6 @@
         start: currentAngle,
         windupEnd,
         snapEnd,
-        cruiseEnd,
         final: finalAngle,
       },
     };
@@ -216,6 +206,11 @@
 
     if (phase.interpolation === "linear") {
       return phase.startAngle + (phase.endAngle - phase.startAngle) * progress;
+    }
+
+    if (phase.interpolation === "frictionDecay") {
+      const distanceFraction = 1 - Math.pow(1 - progress, phase.decayExponent + 1);
+      return phase.startAngle + (phase.endAngle - phase.startAngle) * distanceFraction;
     }
 
     return hermiteAngle(

@@ -285,6 +285,15 @@ function createRouter({
         return;
       }
 
+      if (pathname === "/api/debug/spins/viewers-choice" && req.method === "POST") {
+        auth.requireAuth(req);
+        const spin = state.startDebugViewersChoiceSpin();
+        await state.store.whenIdle();
+        broadcaster();
+        jsonResponse(res, 201, spin);
+        return;
+      }
+
       if (pathname === "/api/overlay/hidden" && req.method === "POST") {
         auth.requireAuth(req);
         state.toggleOverlayHidden();

@@ -116,7 +116,6 @@ class DocketState {
         features: this.config.features,
         overlayTitle: wheelConfig.overlayTitle || "The Docket",
       },
-      storage: this.store.getStorageSummary(),
     };
   }
 
@@ -178,7 +177,6 @@ class DocketState {
       ...input,
       countdownSeconds: Number(input.countdownSeconds ?? current.countdownSeconds),
       overlayTitle: input.overlayTitle ?? current.overlayTitle,
-      lockItInCooldownRounds: Number(input.lockItInCooldownRounds ?? current.lockItInCooldownRounds ?? 0),
       lockItInRevealMs: Number(input.lockItInRevealMs ?? current.lockItInRevealMs ?? 3500),
       physics: {
         ...(current.physics || {}),
@@ -428,6 +426,33 @@ class DocketState {
     return spin;
   }
 
+  startDebugViewersChoiceSpin() {
+    if (this.getActiveSpin()) {
+      throw new Error("A spin is already active");
+    }
+    const viewersChoice = this.store
+      .readJson("specialEntries")
+      .find((entry) => entry.id === "special-viewers-choice");
+    if (!viewersChoice || !viewersChoice.enabled) {
+      throw new Error("Viewers Choice is disabled");
+    }
+    const actionType = viewersChoice.wheelScope === "out" ? "restore" : "eliminate";
+    const spin = this.createImmediateSpin(
+      actionType,
+      {
+        id: null,
+        source: "debug",
+        viewerName: "Debug",
+      },
+      {
+        forcedWinnerEntryId: viewersChoice.id,
+        consumeCooldown: false,
+      },
+    );
+    this.record("spin.debug_started", { spinId: spin.id, forcedWinnerEntryId: viewersChoice.id });
+    return spin;
+  }
+
   startNextGameSpin(triggerSource = "manual") {
     if (this.getActiveSpin()) {
       throw new Error("A spin is already active");
@@ -589,10 +614,11 @@ class DocketState {
     this.updateSession({ activeSpinId: null });
   }
 
-  createImmediateSpin(actionType, queueItem) {
+  createImmediateSpin(actionType, queueItem, options = {}) {
+    const { forcedWinnerEntryId = null, consumeCooldown = true } = options;
     const wheelScope = actionType === "restore" ? "out" : "in";
     const entries = this.buildEligibleEntries(wheelScope);
-    if (wheelScope === "in") {
+    if (wheelScope === "in" && consumeCooldown) {
       const session = this.getSession();
       if (session.lockItInCooldownRemaining > 0) {
         this.updateSession({ lockItInCooldownRemaining: session.lockItInCooldownRemaining - 1 });
@@ -611,7 +637,12 @@ class DocketState {
       bonusWeight: 0,
       finalWeight: entry.baseWeight,
     }));
-    const winner = pickWeighted(snapshots, this.random);
+    const winner = forcedWinnerEntryId
+      ? snapshots.find((entry) => entry.entryId === forcedWinnerEntryId) || null
+      : pickWeighted(snapshots, this.random);
+    if (!winner) {
+      throw new Error("Forced winner entry not found in spin entries");
+    }
     const displayEntries = shuffleEntries(snapshots, this.random);
     const spin = {
       id: randomId("spin"),
@@ -619,9 +650,9 @@ class DocketState {
       status: "spinning",
       startedAt: now(),
       countdownEndsAt: null,
-      triggerQueueItemId: queueItem.id,
-      triggerSource: queueItem.source,
-      viewerName: queueItem.viewerName,
+      triggerQueueItemId: queueItem?.id || null,
+      triggerSource: queueItem?.source || "manual",
+      viewerName: queueItem?.viewerName || "Streamer",
       entries: displayEntries.map((entry) => ({ ...entry })),
       winner: { ...winner },
       revealStyle: actionType,
@@ -831,11 +862,9 @@ class DocketState {
     game.locked = true;
     this.setGames(games);
 
-    const wheelConfig = this.getWheelConfig();
-    const cooldownRounds = Number(wheelConfig.lockItInCooldownRounds ?? 0);
     this.updateSession({
       pendingLockItIn: null,
-      lockItInCooldownRemaining: cooldownRounds + 1,
+      lockItInCooldownRemaining: 1,
     });
 
     this.record("spin.lock_it_in_resolved", {

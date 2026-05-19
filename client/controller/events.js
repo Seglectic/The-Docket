@@ -255,15 +255,17 @@ export function bindControllerEvents({
     );
   });
 
-  els.lockItInCooldownSave.addEventListener("click", async () => {
-    const rounds = Number(els.lockItInCooldown.value || 0);
-    await runControllerAction(
-      () => request("/api/wheel-config", {
-        method: "POST",
-        body: JSON.stringify({ lockItInCooldownRounds: rounds }),
-      }),
-      { status: "Saving cooldown…", successStatus: "Cooldown saved" },
-    );
+  els.debugViewersChoiceButton.addEventListener("click", async () => {
+    if (state.pending.debugViewersChoice) {
+      return;
+    }
+    await runControllerAction(() => request("/api/debug/spins/viewers-choice", { method: "POST" }), {
+      status: "Starting debug Viewers Choice spin…",
+      successStatus: "Debug Viewers Choice spin started",
+      setPending: (pending) => {
+        state.pending.debugViewersChoice = pending;
+      },
+    });
   });
 
   els.themeSelect.addEventListener("change", () => {

@@ -97,6 +97,16 @@ test("viewers choice can be resolved to a chosen game after the spin completes",
   assert.equal(state.getSession().pendingChoice, null);
 });
 
+test("debug viewers choice spin always lands on the viewers choice special entry", async () => {
+  const { state } = await setup();
+  const spin = state.startDebugViewersChoiceSpin();
+
+  assert.equal(spin.status, "spinning");
+  assert.equal(spin.winner.entryId, "special-viewers-choice");
+  assert.equal(spin.triggerSource, "debug");
+  assert.equal(state.getSession().activeSpinId, spin.id);
+});
+
 test("completed queue items are removed after spin resolution", async () => {
   const { state } = await setup();
   const item = state.addQueueItem({ viewerName: "Alice", actionType: "restore" });
@@ -218,14 +228,6 @@ test("spin history is capped to recent entries", async () => {
     state.getSpins().map((spin) => spin.id),
     ["spin-new"],
   );
-});
-
-test("controller snapshot includes storage summary", async () => {
-  const { state } = await setup();
-  const snapshot = state.controllerSnapshot();
-
-  assert.equal(typeof snapshot.storage.totalBytes, "number");
-  assert.equal(snapshot.storage.limitBytes > 0, true);
 });
 
 test("wheel config updates persist physics sliders and recompute derived timings", async () => {

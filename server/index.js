@@ -6,6 +6,7 @@ const { createStore } = require("./store-factory");
 const { DocketState } = require("./state");
 const { AuthManager } = require("./auth");
 const { createRouter } = require("./router");
+const { createWebSocketUpgradeHandler } = require("./ws-upgrade");
 const { GameDatabaseService } = require("./game-db");
 const { TwitchAuthService } = require("./twitch-auth");
 const { TwitchEventSubService } = require("./twitch-eventsub");
@@ -153,18 +154,7 @@ async function main() {
   });
 
   server.on("request", route);
-
-  server.on("upgrade", (req, socket, head) => {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    if (url.pathname !== "/ws") {
-      socket.destroy();
-      return;
-    }
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      ws.clientRole = url.searchParams.get("client") || "unknown";
-      wss.emit("connection", ws, req);
-    });
-  });
+  server.on("upgrade", createWebSocketUpgradeHandler({ auth, wss }));
 
   // Ping all clients every 30s. Browsers respond with a pong automatically.
   // Clients that miss a pong are terminated so they can cleanly reconnect instead

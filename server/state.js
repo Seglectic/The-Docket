@@ -116,7 +116,6 @@ class DocketState {
         features: this.config.features,
         overlayTitle: wheelConfig.overlayTitle || "The Docket",
       },
-      storage: this.store.getStorageSummary(),
     };
   }
 
@@ -178,7 +177,6 @@ class DocketState {
       ...input,
       countdownSeconds: Number(input.countdownSeconds ?? current.countdownSeconds),
       overlayTitle: input.overlayTitle ?? current.overlayTitle,
-      lockItInCooldownRounds: Number(input.lockItInCooldownRounds ?? current.lockItInCooldownRounds ?? 0),
       lockItInRevealMs: Number(input.lockItInRevealMs ?? current.lockItInRevealMs ?? 3500),
       physics: {
         ...(current.physics || {}),
@@ -428,6 +426,33 @@ class DocketState {
     return spin;
   }
 
+  startDebugViewersChoiceSpin() {
+    if (this.getActiveSpin()) {
+      throw new Error("A spin is already active");
+    }
+    const viewersChoice = this.store
+      .readJson("specialEntries")
+      .find((entry) => entry.id === "special-viewers-choice");
+    if (!viewersChoice || !viewersChoice.enabled) {
+      throw new Error("Viewers Choice is disabled");
+    }
+    const actionType = viewersChoice.wheelScope === "out" ? "restore" : "eliminate";
+    const spin = this.createImmediateSpin(
+      actionType,
+      {
+        id: null,
+        source: "debug",
+        viewerName: "Debug",
+      },
+      {
+        forcedWinnerEntryId: viewersChoice.id,
+        consumeCooldown: false,
+      },
+    );
+    this.record("spin.debug_started", { spinId: spin.id, forcedWinnerEntryId: viewersChoice.id });
+    return spin;
+  }
+
   startNextGameSpin(triggerSource = "manual") {
     if (this.getActiveSpin()) {
       throw new Error("A spin is already active");
@@ -458,6 +483,7 @@ class DocketState {
         label: entry.label,
         cover: entry.cover,
         coverFallback: entry.coverFallback || "",
+        wheelScope: entry.wheelScope || "in",
         baseWeight: entry.baseWeight,
         bonusWeight: 0,
         finalWeight: entry.baseWeight,
@@ -589,10 +615,11 @@ class DocketState {
     this.updateSession({ activeSpinId: null });
   }
 
-  createImmediateSpin(actionType, queueItem) {
+  createImmediateSpin(actionType, queueItem, options = {}) {
+    const { forcedWinnerEntryId = null, consumeCooldown = true } = options;
     const wheelScope = actionType === "restore" ? "out" : "in";
     const entries = this.buildEligibleEntries(wheelScope);
-    if (wheelScope === "in") {
+    if (wheelScope === "in" && consumeCooldown) {
       const session = this.getSession();
       if (session.lockItInCooldownRemaining > 0) {
         this.updateSession({ lockItInCooldownRemaining: session.lockItInCooldownRemaining - 1 });
@@ -607,11 +634,18 @@ class DocketState {
       entryId: entry.entryId,
       label: entry.label,
       cover: entry.cover,
+      coverFallback: entry.coverFallback || "",
+      wheelScope: entry.wheelScope || wheelScope,
       baseWeight: entry.baseWeight,
       bonusWeight: 0,
       finalWeight: entry.baseWeight,
     }));
-    const winner = pickWeighted(snapshots, this.random);
+    const winner = forcedWinnerEntryId
+      ? snapshots.find((entry) => entry.entryId === forcedWinnerEntryId) || null
+      : pickWeighted(snapshots, this.random);
+    if (!winner) {
+      throw new Error("Forced winner entry not found in spin entries");
+    }
     const displayEntries = shuffleEntries(snapshots, this.random);
     const spin = {
       id: randomId("spin"),
@@ -619,9 +653,9 @@ class DocketState {
       status: "spinning",
       startedAt: now(),
       countdownEndsAt: null,
-      triggerQueueItemId: queueItem.id,
-      triggerSource: queueItem.source,
-      viewerName: queueItem.viewerName,
+      triggerQueueItemId: queueItem?.id || null,
+      triggerSource: queueItem?.source || "manual",
+      viewerName: queueItem?.viewerName || "Streamer",
       entries: displayEntries.map((entry) => ({ ...entry })),
       winner: { ...winner },
       revealStyle: actionType,
@@ -734,6 +768,7 @@ class DocketState {
         label: game.title,
         cover: game.cover,
         coverFallback: game.coverFallback || "",
+        wheelScope,
         baseWeight: game.locked
           ? Math.max(1, Math.ceil(Number(game.baseWeight || 1) * 0.5))
           : Number(game.baseWeight || 1),
@@ -751,6 +786,8 @@ class DocketState {
         entryId: entry.id,
         label: entry.label,
         cover: "",
+        coverFallback: "",
+        wheelScope,
         baseWeight: Number(entry.baseWeight || 1),
       }));
     return [...games, ...specials];
@@ -775,40 +812,49 @@ class DocketState {
       throw new Error("Selected game is not on the expected side of the docket");
     }
 
-    spin.winner = {
-      spinSessionId: spin.id,
-      entryKind: "game",
-      entryId: game.id,
-      label: game.title,
-      cover: game.cover || "",
-      coverFallback: game.coverFallback || "",
-      baseWeight: Number(game.baseWeight || 1),
-      bonusWeight: 0,
-      finalWeight: Number(game.baseWeight || 1),
-      selectedByViewerChoice: true,
+    if (this.getActiveSpin()) {
+      throw new Error("A spin is already active");
+    }
+
+    const wheelScope = pendingChoice.wheelScope || (spin.type === "restore" ? "out" : "in");
+    const resolvedSpin = {
+      id: randomId("spin"),
+      type: spin.type,
+      status: "reveal",
+      startedAt: now(),
+      countdownEndsAt: null,
+      triggerQueueItemId: null,
+      triggerSource: "viewers_choice_resolved",
+      viewerName: spin.viewerName || pendingChoice.viewerName || "Viewer",
+      entries: [],
+      winner: {
+        spinSessionId: null,
+        entryKind: "game",
+        entryId: game.id,
+        label: game.title,
+        cover: game.cover || "",
+        coverFallback: game.coverFallback || "",
+        wheelScope,
+        baseWeight: Number(game.baseWeight || 1),
+        bonusWeight: 0,
+        finalWeight: Number(game.baseWeight || 1),
+        selectedByViewerChoice: true,
+      },
+      revealStyle: spin.type,
     };
+    resolvedSpin.winner.spinSessionId = resolvedSpin.id;
 
-    if (spin.type === "restore") {
-      game.status = "in";
-      game.locked = false;
-      if (this.getSession().overrideGameId === game.id) {
-        this.updateSession({ overrideGameId: null });
-      }
-    }
-    if (spin.type === "eliminate") {
-      if (!game.locked) {
-        game.status = "out";
-        if (this.getSession().overrideGameId === game.id) {
-          this.updateSession({ overrideGameId: null });
-        }
-      }
-    }
-
-    this.setGames(games);
-    this.upsertSpin(spin);
-    this.updateSession({ pendingChoice: null });
-    this.record("spin.viewers_choice_resolved", { spinId: spin.id, gameId: game.id });
-    return spin;
+    const spins = this.getSpins();
+    spins.push(resolvedSpin);
+    this.setSpins(spins);
+    this.updateSession({ activeSpinId: resolvedSpin.id, pendingChoice: null });
+    this.scheduleComplete(resolvedSpin.id, Number(this.getWheelConfig().revealDurationMs || 5000));
+    this.record("spin.viewers_choice_resolved", {
+      sourceSpinId: spin.id,
+      spinId: resolvedSpin.id,
+      gameId: game.id,
+    });
+    return resolvedSpin;
   }
 
   resolveLockItIn(gameId) {
@@ -831,11 +877,9 @@ class DocketState {
     game.locked = true;
     this.setGames(games);
 
-    const wheelConfig = this.getWheelConfig();
-    const cooldownRounds = Number(wheelConfig.lockItInCooldownRounds ?? 0);
     this.updateSession({
       pendingLockItIn: null,
-      lockItInCooldownRemaining: cooldownRounds + 1,
+      lockItInCooldownRemaining: 1,
     });
 
     this.record("spin.lock_it_in_resolved", {
@@ -867,6 +911,7 @@ class DocketState {
         label: game.title,
         cover: game.cover || "",
         coverFallback: game.coverFallback || "",
+        wheelScope: "in",
         baseWeight: Number(game.baseWeight || 1),
         bonusWeight: 0,
         finalWeight: Number(game.baseWeight || 1),
@@ -925,6 +970,7 @@ class DocketState {
       label: entry.label,
       cover: entry.cover,
       coverFallback: entry.coverFallback || "",
+      wheelScope: entry.wheelScope || "in",
       baseWeight: entry.baseWeight,
       bonusWeight: 0,
       finalWeight: entry.baseWeight,

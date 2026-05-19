@@ -4,7 +4,6 @@ import {
   els,
   escapeHtml,
   footerDecoders,
-  formatBytes,
   formatMs,
   state,
   syncMsSlider,
@@ -241,6 +240,7 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     const spin = state.admin.activeSpin;
     els.nextGameButton.disabled = Boolean(spin || state.pending.nextGame || state.pending.queueStartId);
     els.forceResolveButton.disabled = Boolean(!spin || state.pending.forceResolve);
+    els.debugViewersChoiceButton.disabled = Boolean(spin || state.pending.debugViewersChoice || state.pending.queueStartId);
     const entries = spin?.entries || [];
     els.weightTarget.innerHTML = entries.length
       ? entries.map((entry) => `<option value="${entry.entryId}">${escapeHtml(entry.label)} (${entry.finalWeight})</option>`).join("")
@@ -385,10 +385,6 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     if (!physics || !timings) {
       return;
     }
-    const cooldown = state.admin.wheelConfig?.lockItInCooldownRounds ?? 0;
-    if (document.activeElement !== els.lockItInCooldown) {
-      els.lockItInCooldown.value = cooldown;
-    }
 
     syncNumericSlider(els.launchEnergy, els.launchEnergyOutput, physics.launchEnergy);
     syncNumericSlider(els.friction, els.frictionOutput, physics.friction);
@@ -410,30 +406,6 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
         ` • <span class="conn-stat" data-tooltip="Public">P ${connections.public}</span>`;
     }
     footerDecoders.brand.setText(footerBrandText());
-  }
-
-  function renderStorageUsage() {
-    const storage = state.admin.storage;
-    if (!storage) {
-      els.storageUsageLabel.textContent = "--";
-      els.storageUsageDetail.textContent = "Storage summary unavailable";
-      els.storageBreakdown.textContent = "";
-      els.storageMeterFill.style.height = "0%";
-      return;
-    }
-
-    const percent = Math.max(0, Math.min(100, Number(storage.percentUsed || 0)));
-    els.storageUsageLabel.textContent = `${formatBytes(storage.totalBytes)} / ${formatBytes(storage.limitBytes)}`;
-    els.storageUsageDetail.textContent = `${percent.toFixed(1)}% of the 1 GB controller budget`;
-    els.storageBreakdown.innerHTML = [
-      `Covers ${formatBytes(storage.breakdown?.coversBytes || 0)}`,
-      `Events ${formatBytes(storage.breakdown?.eventLogBytes || 0)}`,
-      `Spins ${formatBytes(storage.breakdown?.spinsBytes || 0)}`,
-      `Runtime ${formatBytes(storage.breakdown?.runtimeBytes || 0)}`,
-    ]
-      .map((line) => `<span>${escapeHtml(line)}</span>`)
-      .join("");
-    els.storageMeterFill.style.height = `${percent}%`;
   }
 
   function renderViewerChoice() {
@@ -556,11 +528,6 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
       });
     }
 
-    // Sync cooldown input from config
-    const cooldown = state.admin.wheelConfig?.lockItInCooldownRounds ?? 0;
-    if (document.activeElement !== els.lockItInCooldown) {
-      els.lockItInCooldown.value = cooldown;
-    }
   }
 
   function renderGameSearchResults(suggestions) {
@@ -696,7 +663,6 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     els.configDrawerToggle.setAttribute("aria-expanded", String(state.ui.configDrawerOpen));
     els.drawerBackdrop.classList.toggle("hidden", !anyDrawerOpen);
     renderConnections();
-    renderStorageUsage();
     renderQueue();
     renderSpin();
     renderGames();

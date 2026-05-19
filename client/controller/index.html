@@ -196,24 +196,6 @@
                 </button>
               </header>
               <div class="config-grid">
-                <section class="config-panel">
-                  <header class="config-panel__header">
-                    <h3>App Storage</h3>
-                  </header>
-                  <div class="storage-widget__summary">
-                    <div class="storage-meter" aria-hidden="true">
-                      <div class="storage-meter__track">
-                        <div id="storage-meter-fill" class="storage-meter__fill"></div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="storage-widget__detail">
-                    <p id="storage-title" class="eyebrow">App Storage</p>
-                    <strong id="storage-usage-label">--</strong>
-                    <p id="storage-usage-detail" class="muted">Controller data usage</p>
-                    <div id="storage-breakdown" class="storage-breakdown muted"></div>
-                  </div>
-                </section>
                 <section class="config-panel config-panel--twitch">
                   <header class="config-panel__header">
                     <h3>Twitch</h3>
@@ -239,14 +221,13 @@
                 </section>
                 <section class="config-panel">
                   <header class="config-panel__header">
-                    <h3>Special Entries</h3>
+                    <h3>Debug</h3>
                   </header>
-                  <label class="config-label" for="lock-it-in-cooldown">Lock It In cooldown rounds</label>
-                  <p class="muted" style="font-size:0.8em;margin:0 0 8px">0 = back next round, 1 = skip one extra round, etc.</p>
-                  <div class="inline-actions">
-                    <input id="lock-it-in-cooldown" type="number" min="0" max="20" step="1" value="0" style="width:80px" />
-                    <button id="lock-it-in-cooldown-save" type="button">Save</button>
-                  </div>
+                  <p class="muted">Start a test spin that always lands on Viewers Choice.</p>
+                  <button id="debug-viewers-choice-button" type="button" class="btn--icon-text">
+                    <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 3v4"/><path d="M12 17v4"/><path d="M3 12h4"/><path d="M17 12h4"/><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/></svg>
+                    Spin Viewers Choice
+                  </button>
                 </section>
                 <section class="config-panel">
                   <header class="config-panel__header">

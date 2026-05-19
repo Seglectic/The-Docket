@@ -234,6 +234,201 @@ test("POST /api/wheel-config persists physics slider settings when authenticated
   assert(body.spinDurationMs > body.timings.glideMs);
 });
 
+test("POST /api/debug/spins/viewers-choice starts a forced viewers choice spin when authenticated", async () => {
+  const { state, config } = await createState();
+  state.upsertGame({ id: "in-1", title: "In 1", status: "in", baseWeight: 1 });
+  const auth = new AuthManager(config);
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth,
+    state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
+    broadcaster: () => {},
+  });
+
+  const login = await runRoute(route, {
+    method: "POST",
+    url: "/api/login",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: { secret: "test-secret" },
+  });
+  const cookie = login.headers["Set-Cookie"] || login.headers["set-cookie"];
+
+  const response = await runRoute(route, {
+    method: "POST",
+    url: "/api/debug/spins/viewers-choice",
+    headers: {
+      cookie,
+    },
+  });
+
+  const body = JSON.parse(response.body);
+  assert.equal(response.statusCode, 201);
+  assert.equal(body.winner.entryId, "special-viewers-choice");
+  assert.equal(body.triggerSource, "debug");
+});
+
+test("POST /api/spins/viewers-choice starts a resolved viewer choice spin when authenticated", async () => {
+  const { state, config } = await createState();
+  state.upsertGame({ id: "out-1", title: "Out 1", status: "out", baseWeight: 1 });
+  const seedSpin = {
+    id: "spin-choice",
+    type: "restore",
+    status: "complete",
+    startedAt: new Date().toISOString(),
+    countdownEndsAt: null,
+    triggerQueueItemId: null,
+    triggerSource: "test",
+    viewerName: "Mina",
+    entries: [
+      {
+        spinSessionId: "spin-choice",
+        entryKind: "special",
+        entryId: "special-viewers-choice",
+        label: "Viewers Choice",
+        cover: "",
+        coverFallback: "",
+        wheelScope: "out",
+        baseWeight: 2,
+        bonusWeight: 0,
+        finalWeight: 2,
+      },
+    ],
+    winner: {
+      spinSessionId: "spin-choice",
+      entryKind: "special",
+      entryId: "special-viewers-choice",
+      label: "Viewers Choice",
+      cover: "",
+      coverFallback: "",
+      wheelScope: "out",
+      baseWeight: 2,
+      bonusWeight: 0,
+      finalWeight: 2,
+    },
+    revealStyle: "restore",
+  };
+  state.setSpins([seedSpin]);
+  state.setSession({
+    activeSpinId: null,
+    pendingChoice: {
+      spinId: seedSpin.id,
+      type: "restore",
+      wheelScope: "out",
+      viewerName: "Mina",
+    },
+    pendingLockItIn: null,
+    overlayHidden: false,
+    lockItInCooldownRemaining: 0,
+    overrideGameId: null,
+  });
+
+  const auth = new AuthManager(config);
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth,
+    state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
+    broadcaster: () => {},
+  });
+
+  const login = await runRoute(route, {
+    method: "POST",
+    url: "/api/login",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: { secret: "test-secret" },
+  });
+  const cookie = login.headers["Set-Cookie"] || login.headers["set-cookie"];
+
+  const response = await runRoute(route, {
+    method: "POST",
+    url: "/api/spins/viewers-choice",
+    headers: {
+      "content-type": "application/json",
+      cookie,
+    },
+    body: {
+      gameId: "out-1",
+    },
+  });
+
+  const body = JSON.parse(response.body);
+  assert.equal(response.statusCode, 200);
+  assert.equal(body.status, "reveal");
+  assert.equal(body.winner.entryId, "out-1");
+  assert.equal(body.triggerSource, "viewers_choice_resolved");
+  assert.equal(state.getSession().pendingChoice, null);
+  assert.equal(state.getSession().activeSpinId, body.id);
+});
+
+test("POST /api/spins/next-game requires auth", async () => {
+  const { state, config } = await createState();
+  state.upsertGame({ id: "in-1", title: "In 1", status: "in", baseWeight: 1 });
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth: new AuthManager(config),
+    state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
+    broadcaster: () => {},
+  });
+
+  const response = await runRoute(route, {
+    method: "POST",
+    url: "/api/spins/next-game",
+  });
+
+  assert.equal(response.statusCode, 401);
+  assert.equal(JSON.parse(response.body).error, "Unauthorized");
+});
+
+test("POST /api/spins/next-game starts a spin when authenticated", async () => {
+  const { state, config } = await createState();
+  state.upsertGame({ id: "in-1", title: "In 1", status: "in", baseWeight: 1 });
+  const auth = new AuthManager(config);
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth,
+    state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
+    broadcaster: () => {},
+  });
+
+  const login = await runRoute(route, {
+    method: "POST",
+    url: "/api/login",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: { secret: "test-secret" },
+  });
+  const cookie = login.headers["Set-Cookie"] || login.headers["set-cookie"];
+
+  const response = await runRoute(route, {
+    method: "POST",
+    url: "/api/spins/next-game",
+    headers: {
+      cookie,
+    },
+  });
+
+  const body = JSON.parse(response.body);
+  assert.equal(response.statusCode, 201);
+  assert.equal(body.type, "next_game");
+  assert.equal(body.status, "countdown");
+});
+
 test("GET /api/game-db/search requires auth", async () => {
   const { state, config } = await createState();
   const route = createRouter({

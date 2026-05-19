@@ -93,8 +93,15 @@ test("viewers choice can be resolved to a chosen game after the spin completes",
   assert.equal(state.getSession().pendingChoice?.spinId, spin.id);
 
   const resolved = state.resolveViewersChoice("out-1");
+  assert.equal(resolved.status, "reveal");
   assert.equal(resolved.winner.entryId, "out-1");
+  assert.equal(resolved.triggerSource, "viewers_choice_resolved");
   assert.equal(state.getSession().pendingChoice, null);
+  assert.equal(state.getSession().activeSpinId, resolved.id);
+  assert.equal(state.getGames().find((entry) => entry.id === "out-1")?.status, "out");
+
+  state.completeSpin(resolved.id);
+  assert.equal(state.getGames().find((entry) => entry.id === "out-1")?.status, "in");
 });
 
 test("debug viewers choice spin always lands on the viewers choice special entry", async () => {

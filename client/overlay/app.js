@@ -57,11 +57,15 @@ async function bootstrap() {
 function syncAnimation() {
   const spin = state.data.activeSpin;
   if (!spin) {
-    state.animatingSpinId = null;
     if (Date.now() >= state.winnerVisibleUntil) {
       state.readyRevealSpinId = null;
     }
     return;
+  }
+  if (state.animatingSpinId && state.animatingSpinId !== spin.id) {
+    state.animationVersion += 1;
+    state.animatingSpinId = null;
+    state.wheelOpacity = 1;
   }
   if (spin.status === "spinning" && spin.winner && state.animatingSpinId !== spin.id) {
     state.animatingSpinId = spin.id;
@@ -74,8 +78,8 @@ function syncAnimation() {
     drawWheel(spin.entries);
     if (state.readyRevealSpinId === spin.id) {
       showWinner(spin);
-    } else if (spin.revealStyle === "lock_it_in" && state.animatingSpinId !== spin.id) {
-      // Lock reveal spin starts at "reveal" — no wheel animation, show winner directly
+    } else if ((spin.revealStyle === "lock_it_in" || !(spin.entries || []).length) && state.animatingSpinId !== spin.id) {
+      // Reveal-only spins skip the wheel animation and show the winner directly.
       state.readyRevealSpinId = spin.id;
       showWinner(spin);
     }
@@ -86,7 +90,7 @@ function showWinner(spin) {
   if (!spin.winner) {
     return;
   }
-  const winningEntry = findWinningEntry(spin);
+  const winningEntry = findWinningEntry(spin) || spin.winner;
   const coverUrl = winningEntry ? resolveCoverUrl(winningEntry) : "";
 
   winnerStage.className = `winner-stage visible ${spin.revealStyle}${coverUrl ? "" : " no-cover"}`;
@@ -370,6 +374,9 @@ function drawSliceCover(entry, start, end, radius, index) {
   ctx.rotate(mid);
   ctx.translate(orbit, 0);
   ctx.rotate(Math.PI / 2);
+  ctx.filter = entry.entryKind === "game" && entry.wheelScope === "out"
+    ? "grayscale(1) contrast(0.92) brightness(0.88)"
+    : "none";
   ctx.globalAlpha = entry.entryKind === "special" ? 0.16 : 0.9;
   ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
   ctx.restore();

@@ -272,6 +272,66 @@ test("POST /api/debug/spins/viewers-choice starts a forced viewers choice spin w
   assert.equal(body.triggerSource, "debug");
 });
 
+test("POST /api/spins/next-game requires auth", async () => {
+  const { state, config } = await createState();
+  state.upsertGame({ id: "in-1", title: "In 1", status: "in", baseWeight: 1 });
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth: new AuthManager(config),
+    state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
+    broadcaster: () => {},
+  });
+
+  const response = await runRoute(route, {
+    method: "POST",
+    url: "/api/spins/next-game",
+  });
+
+  assert.equal(response.statusCode, 401);
+  assert.equal(JSON.parse(response.body).error, "Unauthorized");
+});
+
+test("POST /api/spins/next-game starts a spin when authenticated", async () => {
+  const { state, config } = await createState();
+  state.upsertGame({ id: "in-1", title: "In 1", status: "in", baseWeight: 1 });
+  const auth = new AuthManager(config);
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth,
+    state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
+    broadcaster: () => {},
+  });
+
+  const login = await runRoute(route, {
+    method: "POST",
+    url: "/api/login",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: { secret: "test-secret" },
+  });
+  const cookie = login.headers["Set-Cookie"] || login.headers["set-cookie"];
+
+  const response = await runRoute(route, {
+    method: "POST",
+    url: "/api/spins/next-game",
+    headers: {
+      cookie,
+    },
+  });
+
+  const body = JSON.parse(response.body);
+  assert.equal(response.statusCode, 201);
+  assert.equal(body.type, "next_game");
+  assert.equal(body.status, "countdown");
+});
+
 test("GET /api/game-db/search requires auth", async () => {
   const { state, config } = await createState();
   const route = createRouter({

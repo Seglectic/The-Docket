@@ -1,3 +1,7 @@
+import { createOverlayAudioController } from "./audio.js?v=0.7.6";
+import { lingerDurationForSpin, POINTER_TUNING, WINNER_REVEAL_HOLD_MS } from "./config.js?v=0.7.6";
+import { createPointerController } from "./pointer.js?v=0.7.6";
+
 const canvas = document.getElementById("wheel");
 const ctx = canvas.getContext("2d");
 const viewerLine = document.getElementById("viewer-line");
@@ -12,6 +16,7 @@ const state = {
   data: null,
   socket: null,
   angle: 0,
+  previousAngle: 0,
   wheelOpacity: 1,
   animatingSpinId: null,
   animationVersion: 0,
@@ -21,14 +26,8 @@ const state = {
   lastShownWinnerId: null,
 };
 const imageCache = new Map();
-const WINNER_REVEAL_HOLD_MS = 850;
-const WINNER_MIN_LINGER_MS = 2000;
-const WINNER_LINGER_BY_STYLE_MS = {
-  restore: 3200,
-  eliminate: 3600,
-  next_game: 2600,
-  lock_it_in: 4000,
-};
+const audio = createOverlayAudioController();
+const pointer = createPointerController();
 
 function connect() {
   const protocol = location.protocol === "https:" ? "wss" : "ws";
@@ -57,6 +56,7 @@ async function bootstrap() {
 function syncAnimation() {
   const spin = state.data.activeSpin;
   if (!spin) {
+    resetWheelEffects();
     if (Date.now() >= state.winnerVisibleUntil) {
       state.readyRevealSpinId = null;
     }
@@ -66,6 +66,7 @@ function syncAnimation() {
     state.animationVersion += 1;
     state.animatingSpinId = null;
     state.wheelOpacity = 1;
+    resetWheelEffects();
   }
   if (spin.status === "spinning" && spin.winner && state.animatingSpinId !== spin.id) {
     state.animatingSpinId = spin.id;
@@ -115,7 +116,7 @@ function showWinner(spin) {
         : spin.revealStyle === "lock_it_in"
           ? "lockItInSound"
           : "nextGameSound";
-    playSound(assets[soundKey]);
+    audio.playResultSound(assets[soundKey]);
     state.lastWinnerSpin = structuredClone({
       ...spin,
       entries: (spin.entries || []).map((entry) => ({ ...entry })),
@@ -131,13 +132,6 @@ function showWinner(spin) {
   }
 }
 
-function playSound(url) {
-  if (!url) return;
-  try {
-    new Audio(url).play().catch(() => {});
-  } catch (_) {}
-}
-
 function hideWinner() {
   resultCard.className = "result-card hidden";
   winnerStage.className = "winner-stage hidden";
@@ -149,21 +143,17 @@ function easeOutCubic(value) {
   return 1 - Math.pow(1 - value, 3);
 }
 
-function easeInOutSine(value) {
-  return -(Math.cos(Math.PI * value) - 1) / 2;
-}
-
-function easeOutPower(value, exponent) {
-  return 1 - Math.pow(1 - value, exponent);
-}
-
 function animate(duration, onFrame) {
   return new Promise((resolve) => {
     const startedAt = performance.now();
+    let lastTimestamp = startedAt;
 
     function frame(timestamp) {
       const progress = Math.min(1, (timestamp - startedAt) / duration);
-      onFrame(progress);
+      const elapsedMs = Math.min(duration, timestamp - startedAt);
+      const deltaMs = Math.max(0, timestamp - lastTimestamp);
+      lastTimestamp = timestamp;
+      onFrame(progress, elapsedMs, deltaMs);
       if (progress < 1) {
         requestAnimationFrame(frame);
       } else {
@@ -191,6 +181,8 @@ async function animateToWinner(spin) {
 
   hideWinner();
   state.wheelOpacity = 0;
+  state.previousAngle = state.angle;
+  settlePointer();
   drawWheel(entries);
 
   const wheelConfig = state.data?.wheelConfig || {};
@@ -210,11 +202,19 @@ async function animateToWinner(spin) {
     drawWheel(entries);
   });
 
-  await animate(plan.profile.spinDurationMs, (progress) => {
+  await animate(plan.profile.spinDurationMs, (progress, _elapsedMs, deltaMs) => {
     if (animationVersion !== state.animationVersion) {
       return;
     }
-    state.angle = window.DocketSpinPlan.sampleSpinPlan(plan, progress * plan.profile.spinDurationMs);
+    const nextAngle = window.DocketSpinPlan.sampleSpinPlan(plan, progress * plan.profile.spinDurationMs);
+    updateWheelEffects({
+      previousAngle: state.previousAngle,
+      nextAngle,
+      entryCount: entries.length,
+      deltaMs,
+    });
+    state.angle = nextAngle;
+    state.previousAngle = nextAngle;
     drawWheel(entries);
   });
 
@@ -223,13 +223,22 @@ async function animateToWinner(spin) {
   }
 
   state.angle = plan.angles.final;
+  state.previousAngle = plan.angles.final;
   state.wheelOpacity = 1;
   drawWheel(entries);
-  await wait(plan.durations.revealDelay);
+  await animate(plan.durations.revealDelay, (_progress, _elapsedMs, deltaMs) => {
+    if (animationVersion !== state.animationVersion) {
+      return;
+    }
+    pointer.markIdle();
+    updatePointerPhysics(deltaMs);
+    drawWheel(entries);
+  });
   await wait(WINNER_REVEAL_HOLD_MS);
   if (animationVersion !== state.animationVersion) {
     return;
   }
+  settlePointer();
   state.readyRevealSpinId = spin.id;
   showWinner(spin);
 }
@@ -255,6 +264,7 @@ function render() {
     state.lastWinnerSpin = null;
     state.wheelOpacity = 1;
     state.readyRevealSpinId = null;
+    resetWheelEffects();
     drawWheel([]);
     return;
   }
@@ -325,17 +335,51 @@ function drawWheel(entries = state.data?.activeSpin?.entries || []) {
 }
 
 function drawPointer(centerX) {
+  const theme = getPointerTheme();
+  const pointerDraw = POINTER_TUNING.draw;
+
   ctx.save();
-  ctx.fillStyle = "#f7d774";
-  ctx.strokeStyle = "rgba(54, 34, 7, 0.75)";
-  ctx.lineWidth = 4;
+  ctx.translate(centerX, pointerDraw.anchorY);
+  ctx.rotate(pointer.getDeflection());
+  ctx.translate(-centerX, -pointerDraw.anchorY);
+  ctx.fillStyle = theme.fill;
+  ctx.strokeStyle = theme.stroke;
+  ctx.lineWidth = pointerDraw.strokeWidth;
+  ctx.shadowColor = theme.glow;
+  ctx.shadowBlur = pointerDraw.shadowBlur;
+  ctx.shadowOffsetY = pointerDraw.shadowOffsetY;
   ctx.beginPath();
-  ctx.moveTo(centerX - 34, 60);
-  ctx.lineTo(centerX + 34, 60);
-  ctx.lineTo(centerX, 126);
+  ctx.moveTo(centerX, pointerDraw.topY);
+  ctx.bezierCurveTo(
+    centerX + pointerDraw.halfWidth,
+    pointerDraw.topY + 2,
+    centerX + pointerDraw.halfWidth + 4,
+    pointerDraw.widestY,
+    centerX + pointerDraw.tipRadius,
+    pointerDraw.tipY,
+  );
+  ctx.quadraticCurveTo(centerX, pointerDraw.tipY + 3, centerX - pointerDraw.tipRadius, pointerDraw.tipY);
+  ctx.bezierCurveTo(
+    centerX - pointerDraw.halfWidth - 4,
+    pointerDraw.widestY,
+    centerX - pointerDraw.halfWidth,
+    pointerDraw.topY + 2,
+    centerX,
+    pointerDraw.topY,
+  );
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
+
+  ctx.fillStyle = theme.highlight;
+  ctx.globalAlpha = pointerDraw.glossAlpha;
+  ctx.beginPath();
+  ctx.moveTo(centerX - 14, 40);
+  ctx.quadraticCurveTo(centerX, 30, centerX + 14, 40);
+  ctx.quadraticCurveTo(centerX + 9, pointerDraw.controlY - 30, centerX, pointerDraw.controlY - 20);
+  ctx.quadraticCurveTo(centerX - 9, pointerDraw.controlY - 30, centerX - 14, 40);
+  ctx.closePath();
+  ctx.fill();
   ctx.restore();
 }
 
@@ -416,13 +460,6 @@ function resolveCoverUrl(entry) {
   return entry?.cover || entry?.coverFallback || "";
 }
 
-function lingerDurationForSpin(spin) {
-  return Math.max(
-    WINNER_MIN_LINGER_MS,
-    WINNER_LINGER_BY_STYLE_MS[spin?.revealStyle] || WINNER_MIN_LINGER_MS,
-  );
-}
-
 function loadImage(url, fallback = "") {
   if (!url) {
     return null;
@@ -460,6 +497,41 @@ function loadImage(url, fallback = "") {
     image,
   });
   return null;
+}
+
+function resetWheelEffects() {
+  state.previousAngle = state.angle;
+  pointer.reset();
+  audio.reset();
+}
+
+function settlePointer() {
+  pointer.settle();
+}
+
+function updateWheelEffects({ previousAngle, nextAngle, entryCount, deltaMs }) {
+  pointer.updateForWheelMotion({
+    previousAngle,
+    nextAngle,
+    entryCount,
+    deltaMs,
+    onCrossing: ({ progress, deltaMs: crossingDeltaMs, angularVelocity, crossingsThisFrame }) => {
+      audio.playSpinTick({
+        progress,
+        deltaMs: crossingDeltaMs,
+        angularVelocity,
+        crossingsThisFrame,
+      });
+    },
+  });
+}
+
+function updatePointerPhysics(deltaMs) {
+  pointer.updatePhysics(deltaMs);
+}
+
+function getPointerTheme() {
+  return pointer.getTheme(state.data?.activeSpin || state.lastWinnerSpin || null);
 }
 
 function shade(color, alpha) {

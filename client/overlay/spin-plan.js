@@ -19,6 +19,59 @@
     return ((angle % TWO_PI) + TWO_PI) % TWO_PI;
   }
 
+  function clamp01(value) {
+    return clamp(value, 0, 1);
+  }
+
+  function getPointerCrossings({
+    startAngle,
+    endAngle,
+    entryCount,
+    pointerAngle = -Math.PI / 2,
+  }) {
+    if (!Number.isFinite(startAngle) || !Number.isFinite(endAngle) || entryCount <= 0) {
+      return [];
+    }
+
+    const delta = endAngle - startAngle;
+    if (Math.abs(delta) < 1e-9) {
+      return [];
+    }
+
+    const sliceAngle = TWO_PI / entryCount;
+    const direction = delta > 0 ? 1 : -1;
+    const scaledStart = (startAngle - pointerAngle) / sliceAngle;
+    const scaledEnd = (endAngle - pointerAngle) / sliceAngle;
+    const epsilon = 1e-9;
+    const crossings = [];
+
+    if (direction > 0) {
+      const first = Number.isInteger(scaledStart) ? scaledStart + 1 : Math.ceil(scaledStart);
+      const last = Math.floor(scaledEnd + epsilon);
+      for (let step = first; step <= last; step += 1) {
+        const angle = pointerAngle + step * sliceAngle;
+        crossings.push({
+          angle,
+          direction,
+          progress: clamp01((angle - startAngle) / delta),
+        });
+      }
+      return crossings;
+    }
+
+    const first = Number.isInteger(scaledStart) ? scaledStart - 1 : Math.floor(scaledStart);
+    const last = Math.ceil(scaledEnd - epsilon);
+    for (let step = first; step >= last; step -= 1) {
+      const angle = pointerAngle + step * sliceAngle;
+      crossings.push({
+        angle,
+        direction,
+        progress: clamp01((angle - startAngle) / delta),
+      });
+    }
+    return crossings;
+  }
+
   function hashStringToUnit(value) {
     let hash = 2166136261;
     for (let index = 0; index < value.length; index += 1) {
@@ -227,6 +280,7 @@
     DEFAULT_PHYSICS,
     computeSpinPlan,
     deriveWheelProfile,
+    getPointerCrossings,
     landingAngleForWinner,
     normalizeAngle,
     sampleSpinPlan,

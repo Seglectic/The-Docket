@@ -1,6 +1,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { computeSpinPlan, deriveWheelProfile, normalizeAngle, sampleSpinPlan } = require("../client/overlay/spin-plan");
+const {
+  computeSpinPlan,
+  deriveWheelProfile,
+  getPointerCrossings,
+  normalizeAngle,
+  sampleSpinPlan,
+} = require("../client/overlay/spin-plan");
 
 const TWO_PI = Math.PI * 2;
 
@@ -119,4 +125,50 @@ test("velocity is continuous at the snap→glide boundary", () => {
   const velAfter = (afterBoundary - atBoundary) / (dt / 1000);
   const relDiff = Math.abs(velBefore - velAfter) / Math.max(Math.abs(velBefore), 1);
   assert.ok(relDiff < 0.05, `velocity should match across boundary (before=${velBefore}, after=${velAfter})`);
+});
+
+test("getPointerCrossings counts forward border hits in order", () => {
+  const crossings = getPointerCrossings({
+    startAngle: 0,
+    endAngle: TWO_PI * 1.25,
+    entryCount: 4,
+  });
+
+  assert.equal(crossings.length, 5);
+  assert.deepEqual(crossings.map((entry) => entry.direction), [1, 1, 1, 1, 1]);
+  assert.ok(crossings.every((entry, index) => index === 0 || entry.angle > crossings[index - 1].angle));
+});
+
+test("getPointerCrossings handles wraparound and reverse motion", () => {
+  const forward = getPointerCrossings({
+    startAngle: TWO_PI - 0.2,
+    endAngle: TWO_PI + 0.9,
+    entryCount: 8,
+  });
+  assert.equal(forward.length, 2);
+  assert.deepEqual(forward.map((entry) => entry.direction), [1, 1]);
+
+  const reverse = getPointerCrossings({
+    startAngle: 0.9,
+    endAngle: -1.3,
+    entryCount: 6,
+  });
+  assert.ok(reverse.length >= 2);
+  assert.deepEqual(reverse.map((entry) => entry.direction), new Array(reverse.length).fill(-1));
+  assert.ok(reverse.every((entry, index) => index === 0 || entry.angle < reverse[index - 1].angle));
+});
+
+test("getPointerCrossings does not double-count when starting on a border", () => {
+  const pointerAngle = -Math.PI / 2;
+  const sliceAngle = TWO_PI / 6;
+  const crossings = getPointerCrossings({
+    startAngle: pointerAngle,
+    endAngle: pointerAngle + sliceAngle * 1.2,
+    entryCount: 6,
+    pointerAngle,
+  });
+
+  assert.equal(crossings.length, 1);
+  assert.ok(crossings[0].progress > 0);
+  assert.ok(crossings[0].progress <= 1);
 });

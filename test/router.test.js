@@ -426,7 +426,7 @@ test("POST /api/spins/next-game starts a spin when authenticated", async () => {
   const body = JSON.parse(response.body);
   assert.equal(response.statusCode, 201);
   assert.equal(body.type, "next_game");
-  assert.equal(body.status, "countdown");
+  assert.equal(body.status, "spinning");
 });
 
 test("GET /api/game-db/search requires auth", async () => {

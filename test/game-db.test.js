@@ -9,7 +9,7 @@ const { GameDatabaseService, buildIgdbImageUrl } = require("../server/game-db");
 function createConfig(overrides = {}) {
   return {
     auth: { sharedSecret: "test" },
-    wheel: { countdownSeconds: 1, overlayTitle: "Test" },
+    wheel: { overlayTitle: "Test" },
     specialEntries: {},
     features: { manualMode: true, twitchEnabled: false },
     gameDatabase: {

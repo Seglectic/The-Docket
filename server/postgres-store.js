@@ -104,8 +104,9 @@ class PostgresStore {
 
   defaultWheelConfig() {
     const base = {
-      countdownSeconds: Number(this.config.wheel?.countdownSeconds || 10),
       overlayTitle: this.config.wheel?.overlayTitle || "The Docket",
+      lockItInCooldownRounds: Number(this.config.wheel?.lockItInCooldownRounds ?? 0),
+      lockItInRevealMs: Number(this.config.wheel?.lockItInRevealMs ?? 3500),
       physics: {
         ...(this.config.wheel?.physics || {}),
       },

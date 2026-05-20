@@ -22,6 +22,7 @@ export function bindControllerEvents({
 }) {
   let gameSearchDebounce = null;
   let lastSearchTriggeredAt = 0;
+  let confirmResolver = null;
 
   function isTypingField(target) {
     if (!(target instanceof HTMLElement)) {
@@ -63,6 +64,28 @@ export function bindControllerEvents({
       return;
     }
     drawer.classList.toggle("is-peeking", peeking);
+  }
+
+  function closeConfirmDialog(accepted = false) {
+    if (!state.ui.confirmOpen) {
+      return;
+    }
+    state.ui.confirmOpen = false;
+    state.ui.confirmOptions = null;
+    const resolve = confirmResolver;
+    confirmResolver = null;
+    render();
+    resolve?.(accepted);
+  }
+
+  function openConfirmDialog(options) {
+    confirmResolver?.(false);
+    state.ui.confirmOptions = options;
+    state.ui.confirmOpen = true;
+    render();
+    return new Promise((resolve) => {
+      confirmResolver = resolve;
+    });
   }
 
   els.loginForm.addEventListener("submit", async (event) => {
@@ -114,19 +137,6 @@ export function bindControllerEvents({
     });
   });
 
-  els.forceResolveButton.addEventListener("click", async () => {
-    if (state.pending.forceResolve) {
-      return;
-    }
-    await runControllerAction(() => request("/api/spins/force-resolve", { method: "POST" }), {
-      status: "Advancing active spin…",
-      successStatus: "Spin advanced",
-      setPending: (pending) => {
-        state.pending.forceResolve = pending;
-      },
-    });
-  });
-
   els.gamesDrawerToggle.addEventListener("click", () => {
     toggleDrawer("games");
   });
@@ -148,9 +158,18 @@ export function bindControllerEvents({
   els.queueEditorClose.addEventListener("click", closeQueueEditor);
   els.wheelFeelOpen.addEventListener("click", openWheelFeel);
   els.wheelFeelClose.addEventListener("click", closeWheelFeel);
+  els.confirmCancel.addEventListener("click", () => closeConfirmDialog(false));
+  els.confirmAccept.addEventListener("click", () => closeConfirmDialog(true));
 
 
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.ui.confirmOpen) {
+      closeConfirmDialog(false);
+      return;
+    }
+    if (state.ui.confirmOpen) {
+      return;
+    }
     if (event.key === "Escape" && state.ui.wheelFeelOpen) {
       closeWheelFeel();
       return;
@@ -188,12 +207,21 @@ export function bindControllerEvents({
   });
 
   document.addEventListener("pointerdown", (event) => {
-    if (!state.ui.gamesDrawerOpen && !state.ui.spinDrawerOpen && !state.ui.configDrawerOpen && !state.ui.gameEditorOpen && !state.ui.queueEditorOpen && !state.ui.wheelFeelOpen) {
+    if (!state.ui.gamesDrawerOpen && !state.ui.spinDrawerOpen && !state.ui.configDrawerOpen && !state.ui.gameEditorOpen && !state.ui.queueEditorOpen && !state.ui.wheelFeelOpen && !state.ui.confirmOpen) {
       return;
     }
     const target = event.target;
     if (!(target instanceof Element)) {
       return;
+    }
+    if (state.ui.confirmOpen) {
+      if (target.closest(".game-editor-modal__card")) {
+        return;
+      }
+      if (target.closest(".game-editor-modal")) {
+        closeConfirmDialog(false);
+        return;
+      }
     }
     if (state.ui.gameEditorOpen) {
       if (target.closest(".game-editor-modal__card")) {
@@ -296,6 +324,21 @@ export function bindControllerEvents({
 
   els.gameForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const nextStatus = els.gameStatus.value;
+    const existingActiveGame = state.admin?.games?.find((game) => game.status === "active");
+    const editingSameActiveGame = Boolean(existingActiveGame && existingActiveGame.id === els.gameId.value);
+    if (nextStatus === "active" && existingActiveGame && !editingSameActiveGame) {
+      const confirmed = await openConfirmDialog({
+        eyebrow: "Replace Active Game",
+        title: "Overwrite the current active game?",
+        copy: `${existingActiveGame.title} will be removed and replaced by ${els.gameTitle.value || "this game"}.`,
+        confirmLabel: "Replace Active",
+        intent: "danger",
+      });
+      if (!confirmed) {
+        return;
+      }
+    }
     await request("/api/games", {
       method: "POST",
       body: JSON.stringify({
@@ -336,19 +379,6 @@ export function bindControllerEvents({
     }
     event.preventDefault();
     els.gameForm.requestSubmit();
-  });
-
-  els.weightForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    await request("/api/spins/add-weight", {
-      method: "POST",
-      body: JSON.stringify({
-        viewerName: document.getElementById("weight-viewer").value || "Viewer",
-        targetEntryId: document.getElementById("weight-target").value,
-        weightDelta: Number(document.getElementById("weight-delta").value || 1),
-      }),
-    });
-    await loadAdminState();
   });
 
   els.testRedeemButton.addEventListener("click", async () => {
@@ -445,7 +475,6 @@ export function bindControllerEvents({
       return;
     }
 
-    const toggleButton = target.closest("[data-toggle]");
     const toggleWheelButton = target.closest("[data-toggle-wheel-status]");
     if (toggleWheelButton instanceof HTMLElement) {
       const game = state.admin?.games?.find((entry) => entry.id === toggleWheelButton.dataset.toggleWheelStatus);
@@ -486,12 +515,27 @@ export function bindControllerEvents({
 
     const deleteButton = target.closest("[data-delete]");
     if (deleteButton instanceof HTMLElement) {
+      const game = state.admin?.games?.find((entry) => entry.id === deleteButton.dataset.delete);
+      if (!game) {
+        return;
+      }
+      const confirmed = await openConfirmDialog({
+        eyebrow: "Delete Game",
+        title: `Delete ${game.title}?`,
+        copy: "This removes the game from the docket completely.",
+        confirmLabel: "Delete Game",
+        intent: "danger",
+      });
+      if (!confirmed) {
+        return;
+      }
       await request(`/api/games/${deleteButton.dataset.delete}`, { method: "DELETE" });
       await loadAdminState();
     }
   });
 
   [
+    els.gameStatusActive,
     els.gameStatusIn,
     els.gameStatusOut,
     els.gameStatusSeasonal,

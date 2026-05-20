@@ -258,12 +258,7 @@ function render() {
     drawWheel([]);
     return;
   }
-  const countdown = active.countdownEndsAt
-    ? Math.max(0, Math.ceil((new Date(active.countdownEndsAt).getTime() - Date.now()) / 1000))
-    : null;
-  viewerLine.textContent = countdown !== null
-    ? `${active.viewerName || "Streamer"} • ${active.type} • ${countdown}s`
-    : `${active.viewerName || "Streamer"} • ${active.type}`;
+  viewerLine.textContent = `${active.viewerName || "Streamer"} • ${active.type}`;
   drawWheel(active.entries);
 }
 

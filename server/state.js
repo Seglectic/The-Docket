@@ -1,7 +1,7 @@
 const { now, pickWeighted, randomId, shuffleEntries } = require("./utils");
 const { deriveWheelProfile } = require("../client/overlay/spin-plan");
 
-const GAME_STATUSES = ["in", "out", "seasonal", "new_release", "queue"];
+const GAME_STATUSES = ["active", "in", "out", "seasonal", "new_release", "queue"];
 const OVERRIDE_GAME_STATUSES = ["seasonal", "new_release", "queue"];
 
 function normalizeGameStatus(status) {
@@ -23,8 +23,19 @@ class DocketState {
     this.ensureWheelConfig();
     this.migrateSpecialEntries();
     this.cleanupPersistedQueue();
+    this.normalizeActiveGames();
     this.enforceAtMostOneLock();
     this.recoverActiveSpin();
+  }
+
+  normalizeActiveGames() {
+    const games = this.getGames();
+    const activeGames = games.filter((game) => game.status === "active");
+    if (activeGames.length <= 1) {
+      return;
+    }
+    const keptId = activeGames[0].id;
+    this.setGames(games.filter((game) => game.status !== "active" || game.id === keptId));
   }
 
   migrateSpecialEntries() {
@@ -84,9 +95,11 @@ class DocketState {
     const overrideGame = state.session.overrideGameId
       ? state.games.find((game) => game.id === state.session.overrideGameId) || null
       : null;
+    const activeGame = state.games.find((game) => game.status === "active") || null;
     const assets = this.config.assets || {};
     return {
       games: state.games,
+      activeGame,
       activeSpin: state.activeSpin,
       lastCompletedSpin: state.lastCompletedSpin,
       overrideGame,
@@ -106,6 +119,7 @@ class DocketState {
     const wheelConfig = this.getWheelConfig();
     return {
       games: this.getGames(),
+      activeGame: this.getActiveGame(),
       queue: this.store.readJson("queue"),
       activeSpin: this.getActiveSpin(),
       lastCompletedSpin: this.getLastCompletedSpin(),
@@ -163,8 +177,9 @@ class DocketState {
     }
 
     const normalized = this.updateWheelConfig({
-      countdownSeconds: current?.countdownSeconds,
       overlayTitle: current?.overlayTitle,
+      lockItInCooldownRounds: current?.lockItInCooldownRounds,
+      lockItInRevealMs: current?.lockItInRevealMs,
       physics: current?.physics,
     });
     return normalized;
@@ -175,7 +190,6 @@ class DocketState {
     const base = {
       ...current,
       ...input,
-      countdownSeconds: Number(input.countdownSeconds ?? current.countdownSeconds),
       overlayTitle: input.overlayTitle ?? current.overlayTitle,
       lockItInRevealMs: Number(input.lockItInRevealMs ?? current.lockItInRevealMs ?? 3500),
       physics: {
@@ -262,6 +276,10 @@ class DocketState {
       .sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))[0] || null;
   }
 
+  getActiveGame() {
+    return this.getGames().find((game) => game.status === "active") || null;
+  }
+
   addQueueItem({ source = "manual", viewerName, actionType, userInput = "", sourceMetadata = {} }) {
     const queue = this.getQueue();
     const item = {
@@ -310,6 +328,10 @@ class DocketState {
     if (!game) {
       throw new Error("Game not found");
     }
+    if (patch.status === "active") {
+      this.deleteExistingActiveGame(games, game.id);
+      patch.locked = false;
+    }
     Object.assign(game, patch);
     this.setGames(games);
     this.record("game.updated", { id, patch });
@@ -321,6 +343,9 @@ class DocketState {
     const existing = input.id ? games.find((entry) => entry.id === input.id) : null;
     const normalizedStatus = normalizeGameStatus(input.status);
     if (existing) {
+      if (normalizedStatus === "active") {
+        this.deleteExistingActiveGame(games, existing.id);
+      }
       Object.assign(existing, {
         title: input.title,
         cover: input.cover || "",
@@ -328,7 +353,7 @@ class DocketState {
         status: normalizedStatus,
         baseWeight: Number(input.baseWeight || 1),
         sortOrder: Number(input.sortOrder || existing.sortOrder || games.length + 1),
-        locked: Boolean(input.locked),
+        locked: normalizedStatus === "active" ? false : Boolean(input.locked),
         metadataSource: input.metadataSource || "",
         metadataId: input.metadataId || "",
         metadataSlug: input.metadataSlug || "",
@@ -341,6 +366,9 @@ class DocketState {
       this.record("game.updated", { id: existing.id });
       return existing;
     }
+    if (normalizedStatus === "active") {
+      this.deleteExistingActiveGame(games);
+    }
     const game = {
       id: input.id || randomId("game"),
       title: input.title,
@@ -349,7 +377,7 @@ class DocketState {
       status: normalizedStatus,
       baseWeight: Number(input.baseWeight || 1),
       sortOrder: Number(input.sortOrder || games.length + 1),
-      locked: Boolean(input.locked),
+      locked: normalizedStatus === "active" ? false : Boolean(input.locked),
       metadataSource: input.metadataSource || "",
       metadataId: input.metadataId || "",
       metadataSlug: input.metadataSlug || "",
@@ -415,9 +443,6 @@ class DocketState {
     if (item.status !== "queued") {
       throw new Error("Queue item is not queued");
     }
-    if (item.actionType === "add_weight") {
-      throw new Error("Add weight is only valid during an active next-game countdown");
-    }
     const spin = this.createImmediateSpin(item.actionType, item);
     item.status = "processing";
     item.spinSessionId = spin.id;
@@ -457,75 +482,13 @@ class DocketState {
     if (this.getActiveSpin()) {
       throw new Error("A spin is already active");
     }
-    const countdownMs = Number(this.getWheelConfig().countdownSeconds || 10) * 1000;
-    const games = this.buildEligibleEntries("in");
-    const session = this.getSession();
-    if (session.lockItInCooldownRemaining > 0) {
-      this.updateSession({ lockItInCooldownRemaining: session.lockItInCooldownRemaining - 1 });
-    }
-    if (!games.length) {
-      throw new Error("No eligible entries available");
-    }
-    const shuffled = shuffleEntries(games, this.random);
-    const spin = {
-      id: randomId("spin"),
-      type: "next_game",
-      status: "countdown",
-      startedAt: now(),
-      countdownEndsAt: new Date(Date.now() + countdownMs).toISOString(),
-      triggerQueueItemId: null,
-      triggerSource,
+    const queueItem = {
+      id: null,
+      source: triggerSource,
       viewerName: "Streamer",
-      entries: shuffled.map((entry) => ({
-        spinSessionId: null,
-        entryKind: entry.entryKind,
-        entryId: entry.entryId,
-        label: entry.label,
-        cover: entry.cover,
-        coverFallback: entry.coverFallback || "",
-        wheelScope: entry.wheelScope || "in",
-        baseWeight: entry.baseWeight,
-        bonusWeight: 0,
-        finalWeight: entry.baseWeight,
-      })),
-      winner: null,
-      revealStyle: "next_game",
     };
-    for (const entry of spin.entries) {
-      entry.spinSessionId = spin.id;
-    }
-    const spins = this.getSpins();
-    spins.push(spin);
-    this.setSpins(spins);
-    this.updateSession({ activeSpinId: spin.id, pendingChoice: null, pendingLockItIn: null });
-    this.scheduleCountdown(spin.id, countdownMs);
-    this.record("spin.countdown_started", { spinId: spin.id });
-    return spin;
-  }
-
-  addWeightToActiveSpin({ viewerName, targetEntryId, weightDelta = 1, source = "manual", userInput = "" }) {
-    const spin = this.getActiveSpin();
-    if (!spin || spin.type !== "next_game" || spin.status !== "countdown") {
-      throw new Error("No active next-game countdown");
-    }
-    if (Date.now() >= new Date(spin.countdownEndsAt).getTime()) {
-      throw new Error("Countdown already ended");
-    }
-    const target = spin.entries.find((entry) => entry.entryId === targetEntryId);
-    if (!target) {
-      throw new Error("Target entry not found in active spin");
-    }
-    const queueItem = this.addQueueItem({
-      source,
-      viewerName,
-      actionType: "add_weight",
-      userInput,
-    });
-    this.setQueue(this.getQueue().filter((entry) => entry.id !== queueItem.id));
-    target.bonusWeight += Number(weightDelta || 1);
-    target.finalWeight = target.baseWeight + target.bonusWeight;
-    this.upsertSpin(spin);
-    this.record("spin.weight_added", { spinId: spin.id, targetEntryId, viewerName });
+    const spin = this.createImmediateSpin("next_game", queueItem);
+    this.record("spin.started", { spinId: spin.id, triggerSource });
     return spin;
   }
 
@@ -536,10 +499,6 @@ class DocketState {
     }
     if (spin.status === "complete") {
       return spin;
-    }
-    if (spin.status === "countdown") {
-      this.resolveCountdownSpin(spinId);
-      return this.findSpin(spinId);
     }
     if (spin.status === "spinning" || spin.status === "reveal") {
       spin.status = "complete";
@@ -553,37 +512,12 @@ class DocketState {
     return spin;
   }
 
-  forceResolveActiveSpin() {
-    const spin = this.getActiveSpin();
-    if (!spin) {
-      throw new Error("No active spin");
-    }
-    if (spin.status === "countdown") {
-      return this.resolveCountdownSpin(spin.id);
-    }
-    if (spin.status === "spinning") {
-      spin.status = "reveal";
-      this.upsertSpin(spin);
-      return spin;
-    }
-      return this.completeSpin(spin.id);
-  }
-
   recoverActiveSpin() {
     const active = this.getActiveSpin();
     if (!active) {
       return;
     }
     const wheelConfig = this.getWheelConfig();
-    if (active.status === "countdown") {
-      const ms = new Date(active.countdownEndsAt).getTime() - Date.now();
-      if (ms <= 0) {
-        this.resolveCountdownSpin(active.id);
-      } else {
-        this.scheduleCountdown(active.id, ms);
-      }
-      return;
-    }
     if (active.status === "spinning") {
       const revealAt = this.getRevealAt(active, wheelConfig);
       const ms = new Date(revealAt).getTime() - Date.now();
@@ -652,7 +586,6 @@ class DocketState {
       type: actionType,
       status: "spinning",
       startedAt: now(),
-      countdownEndsAt: null,
       triggerQueueItemId: queueItem?.id || null,
       triggerSource: queueItem?.source || "manual",
       viewerName: queueItem?.viewerName || "Streamer",
@@ -669,27 +602,6 @@ class DocketState {
     this.setSpins(spins);
     this.updateSession({ activeSpinId: spin.id, pendingChoice: null, pendingLockItIn: null });
     this.scheduleReveal(spin.id, Number(this.getWheelConfig().spinDurationMs || 6500));
-    return spin;
-  }
-
-  resolveCountdownSpin(spinId) {
-    const spin = this.findSpin(spinId);
-    if (!spin) {
-      throw new Error("Spin not found");
-    }
-    if (spin.status !== "countdown") {
-      return spin;
-    }
-    this.clearTimer(spin.id);
-    for (const entry of spin.entries) {
-      entry.finalWeight = entry.baseWeight + entry.bonusWeight;
-    }
-    const winner = pickWeighted(spin.entries, this.random);
-    spin.winner = winner ? { ...winner } : null;
-    spin.status = "spinning";
-    this.upsertSpin(spin);
-    this.scheduleReveal(spin.id, Number(this.getWheelConfig().spinDurationMs || 6500));
-    this.record("spin.countdown_resolved", { spinId: spin.id });
     return spin;
   }
 
@@ -722,6 +634,14 @@ class DocketState {
           if (this.getSession().overrideGameId === game.id) {
             this.updateSession({ overrideGameId: null });
           }
+        }
+      }
+      if (game && spin.type === "next_game") {
+        this.deleteExistingActiveGame(games, game.id);
+        game.status = "active";
+        game.locked = false;
+        if (this.getSession().overrideGameId === game.id) {
+          this.updateSession({ overrideGameId: null });
         }
       }
     }
@@ -899,7 +819,6 @@ class DocketState {
       type: originalSpin ? originalSpin.type : "eliminate",
       status: "reveal",
       startedAt: now(),
-      countdownEndsAt: null,
       triggerQueueItemId: null,
       triggerSource: "lock_it_in",
       viewerName: originalSpin ? originalSpin.viewerName : "Streamer",
@@ -982,7 +901,6 @@ class DocketState {
       type: actionType,
       status: "spinning",
       startedAt: now(),
-      countdownEndsAt: null,
       triggerQueueItemId: null,
       triggerSource: "lock_it_in_respun",
       viewerName: originalSpin ? originalSpin.viewerName : "Streamer",
@@ -1057,18 +975,6 @@ class DocketState {
     this.setSpins(spins);
   }
 
-  scheduleCountdown(spinId, delayMs) {
-    this.clearTimer(spinId);
-    const timer = setTimeout(() => {
-      try {
-        this.resolveCountdownSpin(spinId);
-      } catch (error) {
-        this.record("spin.error", { spinId, message: error.message });
-      }
-    }, Math.max(0, delayMs));
-    this.timers.set(spinId, timer);
-  }
-
   scheduleReveal(spinId, delayMs) {
     this.clearTimer(spinId);
     const timer = setTimeout(() => {
@@ -1109,6 +1015,23 @@ class DocketState {
         Number(wheelConfig.spinDurationMs || 6500) +
         Number(wheelConfig.revealDurationMs || 5000),
     ).toISOString();
+  }
+
+  deleteExistingActiveGame(games, exceptId = null) {
+    let removed = false;
+    for (let index = games.length - 1; index >= 0; index -= 1) {
+      const game = games[index];
+      if (game.status !== "active" || game.id === exceptId) {
+        continue;
+      }
+      games.splice(index, 1);
+      removed = true;
+      if (this.getSession().overrideGameId === game.id) {
+        this.updateSession({ overrideGameId: null });
+      }
+      this.record("game.deleted", { id: game.id, reason: "active_replaced" });
+    }
+    return removed;
   }
 
   clearTimer(spinId) {

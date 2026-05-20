@@ -157,21 +157,17 @@
                 </button>
               </header>
               <div class="stack">
+                <section id="spin-active-game" class="config-panel">
+                  <header class="config-panel__header">
+                    <h3>Current Active Game</h3>
+                  </header>
+                  <div id="spin-active-game-content" class="muted">No active game yet.</div>
+                </section>
                 <button id="next-game-button" type="button" class="btn--icon-text">
                   <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
                   Start Next Game Spin
                 </button>
-                <button id="force-resolve-button" type="button" class="btn--icon-text">
-                  <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/></svg>
-                  Force Advance
-                </button>
               </div>
-              <form id="weight-form" class="stack">
-                <input id="weight-viewer" placeholder="Viewer name" />
-                <select id="weight-target"></select>
-                <input id="weight-delta" type="number" min="1" value="1" />
-                <button type="submit">Add Weight To Active Spin</button>
-              </form>
             </article>
           </aside>
 
@@ -273,6 +269,7 @@
                 <div class="game-editor-art-row">
                   <div id="game-cover-preview" class="cover-preview">No cover selected</div>
                   <div class="game-status-toggle" role="group" aria-label="Game status">
+                    <button id="game-status-active" class="secondary" type="button" data-game-status-value="active">Active</button>
                     <button id="game-status-in" class="secondary" type="button" data-game-status-value="in">In</button>
                     <button id="game-status-out" class="secondary" type="button" data-game-status-value="out">Out</button>
                     <button id="game-status-seasonal" class="secondary" type="button" data-game-status-value="seasonal">Seasonal</button>
@@ -340,6 +337,22 @@
                 </label>
                 <button type="submit">Save Wheel Feel</button>
               </form>
+            </div>
+          </section>
+
+          <section id="confirm-modal" class="game-editor-modal hidden">
+            <div class="game-editor-modal__card card">
+              <header class="game-editor-modal__header">
+                <div>
+                  <p id="confirm-eyebrow" class="eyebrow">Confirm</p>
+                  <h3 id="confirm-title">Are you sure?</h3>
+                  <p id="confirm-copy" class="muted"></p>
+                </div>
+              </header>
+              <div class="inline-actions">
+                <button id="confirm-cancel" class="secondary" type="button">Cancel</button>
+                <button id="confirm-accept" class="danger" type="button">Confirm</button>
+              </div>
             </div>
           </section>
         </section>

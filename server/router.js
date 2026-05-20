@@ -237,25 +237,6 @@ function createRouter({
         return;
       }
 
-      if (pathname === "/api/spins/force-resolve" && req.method === "POST") {
-        auth.requireAuth(req);
-        const spin = state.forceResolveActiveSpin();
-        await state.store.whenIdle();
-        broadcaster();
-        jsonResponse(res, 200, spin);
-        return;
-      }
-
-      if (pathname === "/api/spins/add-weight" && req.method === "POST") {
-        auth.requireAuth(req);
-        const body = await readBody(req);
-        const spin = state.addWeightToActiveSpin(body);
-        await state.store.whenIdle();
-        broadcaster();
-        jsonResponse(res, 200, spin);
-        return;
-      }
-
       if (pathname === "/api/spins/viewers-choice" && req.method === "POST") {
         auth.requireAuth(req);
         const body = await readBody(req);

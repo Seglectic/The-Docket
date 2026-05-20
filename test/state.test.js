@@ -10,7 +10,7 @@ function createConfig(overrides = {}) {
   return {
     server: { host: "127.0.0.1", port: 3030 },
     auth: { sharedSecret: "test" },
-    wheel: { countdownSeconds: 1, spinDurationMs: 10, revealDurationMs: 10, overlayTitle: "Test" },
+    wheel: { spinDurationMs: 10, revealDurationMs: 10, overlayTitle: "Test" },
     features: { manualMode: true, twitchEnabled: false },
     specialEntries: {
       viewersChoice: { enabled: true, label: "Viewers Choice", baseWeight: 2, wheelScope: "out" },
@@ -124,24 +124,18 @@ test("completed queue items are removed after spin resolution", async () => {
   assert.equal(state.getQueue().find((entry) => entry.id === item.id), undefined);
 });
 
-test("countdown spin accepts weight before cutoff and resolves after cutoff", async () => {
+test("next-game spin starts immediately and resolves after spin timers", async () => {
   const { state } = await setup();
   const spin = state.startNextGameSpin();
-  const targetId = spin.entries[0].entryId;
-  state.addWeightToActiveSpin({ viewerName: "Cara", targetEntryId: targetId, weightDelta: 2 });
-  const active = state.getActiveSpin();
-  const target = active.entries.find((entry) => entry.entryId === targetId);
-  assert.equal(target.finalWeight, target.baseWeight + 2);
-  await new Promise((resolve) => setTimeout(resolve, 1100));
-  const resolved = state.findSpin(spin.id);
-  assert.notEqual(resolved.status, "countdown");
-  assert(resolved.winner);
+  assert.equal(spin.status, "spinning");
+  assert(spin.winner);
+  assert.equal(state.getActiveSpin()?.id, spin.id);
 });
 
-test("active session survives restart and resolves overdue countdowns", async () => {
+test("active session survives restart and resolves overdue spinning sessions", async () => {
   const { state, tempRoot } = await setup();
   const spin = state.startNextGameSpin();
-  spin.countdownEndsAt = new Date(Date.now() - 100).toISOString();
+  spin.startedAt = new Date(Date.now() - 20_000).toISOString();
   state.upsertSpin(spin);
 
   const config = createConfig();
@@ -150,7 +144,8 @@ test("active session survives restart and resolves overdue countdowns", async ()
   store.readSeedGames = () => [];
   const recovered = new DocketState(store, config, { random: () => 0 });
   await recovered.bootstrap();
-  assert.equal(recovered.getActiveSpin().status, "spinning");
+  assert.equal(recovered.getActiveSpin(), null);
+  assert.equal(recovered.findSpin(spin.id).status, "complete");
 });
 
 test("overdue spinning session is completed during recovery", async () => {
@@ -273,11 +268,42 @@ test("upsertGame persists metadata fields for auto-matched titles", async () => 
   assert.equal(game.releaseYear, 2021);
 });
 
+test("manual active game replacement keeps only one active game", async () => {
+  const { state } = await setup();
+  const first = state.upsertGame({ title: "First Active", status: "active", baseWeight: 1 });
+  const second = state.upsertGame({ title: "Second Active", status: "active", baseWeight: 1 });
+
+  const games = state.getGames();
+  assert.equal(games.some((game) => game.id === first.id), false);
+  assert.equal(games.some((game) => game.id === second.id), true);
+  assert.equal(games.filter((game) => game.status === "active").length, 1);
+  assert.equal(state.getActiveGame().id, second.id);
+});
+
+test("next game completion promotes winner to active and discards previous active", async () => {
+  const { state } = await setup();
+  const active = state.upsertGame({ title: "Current Active", status: "active", baseWeight: 1 });
+  const spin = state.startNextGameSpin();
+  const winner = spin.entries.find((entry) => entry.entryKind === "game" && entry.entryId === "in-2");
+  spin.winner = winner;
+  spin.status = "reveal";
+  state.upsertSpin(spin);
+  state.completeSpin(spin.id);
+
+  const games = state.getGames();
+  const next = games.find((game) => game.id === "in-2");
+  assert.equal(games.some((game) => game.id === active.id), false);
+  assert.equal(next.status, "active");
+  assert.equal(next.locked, false);
+  assert.equal(state.buildEligibleEntries("in").some((entry) => entry.entryId === "in-2"), false);
+});
+
 test("seasonal, new release, and queue games stay off the wheels", async () => {
   const { state } = await setup();
   state.upsertGame({ title: "Seasonal Pick", status: "seasonal", baseWeight: 1 });
   state.upsertGame({ title: "Fresh Drop", status: "new_release", baseWeight: 1 });
   state.upsertGame({ title: "Queue Slot", status: "queue", baseWeight: 1 });
+  state.upsertGame({ title: "Now Playing", status: "active", baseWeight: 1 });
 
   const inEntries = state.buildEligibleEntries("in");
   const outEntries = state.buildEligibleEntries("out");
@@ -287,9 +313,11 @@ test("seasonal, new release, and queue games stay off the wheels", async () => {
   assert.equal(inEntries.some((entry) => entry.label === "Seasonal Pick"), false);
   assert.equal(inEntries.some((entry) => entry.label === "Fresh Drop"), false);
   assert.equal(inEntries.some((entry) => entry.label === "Queue Slot"), false);
+  assert.equal(inEntries.some((entry) => entry.label === "Now Playing"), false);
   assert.equal(outEntries.some((entry) => entry.label === "Seasonal Pick"), false);
   assert.equal(outEntries.some((entry) => entry.label === "Fresh Drop"), false);
   assert.equal(outEntries.some((entry) => entry.label === "Queue Slot"), false);
+  assert.equal(outEntries.some((entry) => entry.label === "Now Playing"), false);
 });
 
 test("only one override game can be active at a time", async () => {
@@ -308,4 +336,27 @@ test("only one override game can be active at a time", async () => {
   const cleared = state.setOverrideGame(null);
   assert.equal(cleared, null);
   assert.equal(state.getSession().overrideGameId, null);
+});
+
+test("bootstrap normalizes duplicate active games", async () => {
+  const { tempRoot } = await setup();
+  fs.writeFileSync(
+    path.join(tempRoot, "games.json"),
+    `${JSON.stringify([
+      { id: "active-1", title: "Active 1", cover: "", status: "active", baseWeight: 1, sortOrder: 1, locked: false },
+      { id: "active-2", title: "Active 2", cover: "", status: "active", baseWeight: 1, sortOrder: 2, locked: false },
+      { id: "in-1", title: "In 1", cover: "", status: "in", baseWeight: 1, sortOrder: 3, locked: false },
+    ], null, 2)}\n`,
+    "utf8",
+  );
+
+  const config = createConfig();
+  const store = new FileStore(config);
+  store.dataDir = tempRoot;
+  store.readSeedGames = () => [];
+  const recovered = new DocketState(store, config, { random: () => 0 });
+  await recovered.bootstrap();
+
+  assert.equal(recovered.getGames().filter((game) => game.status === "active").length, 1);
+  assert.equal(recovered.getActiveGame().id, "active-1");
 });

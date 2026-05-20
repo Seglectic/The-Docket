@@ -1,6 +1,7 @@
 const title = document.getElementById("title");
 const lastAction = document.getElementById("last-action");
 const overrideCurrent = document.getElementById("override-current");
+const activeCurrent = document.getElementById("active-current");
 const inList = document.getElementById("in-list");
 const outList = document.getElementById("out-list");
 const overrideList = document.getElementById("override-list");
@@ -56,9 +57,12 @@ async function bootstrap() {
 
 function render() {
   const data = appState.data;
+  const activeGame = data.activeGame || data.games.find((game) => game.status === "active");
   title.textContent = data.overlayTitle || "The Docket";
   if (data.overrideGame) {
     lastAction.textContent = `Override live: ${data.overrideGame.title}`;
+  } else if (activeGame) {
+    lastAction.textContent = `Current game: ${activeGame.title}`;
   } else if (data.activeSpin?.winner && (data.activeSpin.status === "reveal" || data.activeSpin.status === "complete")) {
     lastAction.textContent = `${data.activeSpin.viewerName || "Streamer"} • ${data.activeSpin.type} • ${data.activeSpin.winner.label}`;
   } else if (data.lastCompletedSpin?.winner) {
@@ -71,6 +75,9 @@ function render() {
   overrideCurrent.textContent = data.overrideGame
     ? `${data.overrideGame.title} is overriding the wheel`
     : "Wheel result is live";
+  activeCurrent.textContent = activeGame
+    ? `${activeGame.title} is currently active`
+    : "No game active yet";
   renderList(inList, data.games.filter((game) => game.status === "in"));
   renderList(outList, data.games.filter((game) => game.status === "out"));
   renderList(overrideList, data.games.filter((game) => ["seasonal", "new_release", "queue"].includes(game.status)), {

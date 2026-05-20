@@ -21,7 +21,7 @@ function createConfig() {
         redirectUri: "http://localhost:3030/auth/twitch/callback",
       },
     },
-    wheel: { countdownSeconds: 1, spinDurationMs: 10, revealDurationMs: 10, overlayTitle: "Test" },
+    wheel: { spinDurationMs: 10, revealDurationMs: 10, overlayTitle: "Test" },
     features: { manualMode: true, twitchEnabled: false },
     specialEntries: {
       viewersChoice: { enabled: true, label: "Viewers Choice", baseWeight: 2, wheelScope: "out" },
@@ -703,4 +703,49 @@ test("POST /api/games stores remote cover URLs as-is when authenticated", async 
   assert.equal(response.statusCode, 201);
   assert.equal(body.cover, "https://images.example/halo.jpg");
   assert.equal(body.coverFallback, "");
+});
+
+test("POST /api/games with active status replaces the previous active game", async () => {
+  const { state, config } = await createState();
+  state.upsertGame({ title: "Current Active", status: "active", baseWeight: 1 });
+  const auth = new AuthManager(config);
+  const route = createRouter({
+    rootDir: process.cwd(),
+    auth,
+    state,
+    gameDatabase: createGameDatabaseStub(),
+    twitchAuth: createTwitchAuthStub(),
+    buildAdminState: () => ({ ...state.controllerSnapshot(), twitch: createTwitchAuthStub().getPublicState() }),
+    broadcaster: () => {},
+  });
+
+  const login = await runRoute(route, {
+    method: "POST",
+    url: "/api/login",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: { secret: "test-secret" },
+  });
+  const cookie = login.headers["Set-Cookie"] || login.headers["set-cookie"];
+
+  const response = await runRoute(route, {
+    method: "POST",
+    url: "/api/games",
+    headers: {
+      "content-type": "application/json",
+      cookie,
+    },
+    body: {
+      title: "New Active",
+      status: "active",
+      baseWeight: 1,
+    },
+  });
+
+  const body = JSON.parse(response.body);
+  assert.equal(response.statusCode, 201);
+  assert.equal(body.status, "active");
+  assert.equal(state.getGames().filter((game) => game.status === "active").length, 1);
+  assert.equal(state.getActiveGame().title, "New Active");
 });

@@ -9,7 +9,7 @@ const { CoverCacheService } = require("../server/cover-cache");
 function createConfig() {
   return {
     auth: { sharedSecret: "test" },
-    wheel: { countdownSeconds: 1, overlayTitle: "Test" },
+    wheel: { overlayTitle: "Test" },
     specialEntries: {},
     features: { manualMode: true, twitchEnabled: false },
   };

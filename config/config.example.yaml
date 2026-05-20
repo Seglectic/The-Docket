@@ -32,7 +32,6 @@ gameDatabase:
     clientSecret: ""
     imageSize: "cover_big_2x"
 wheel:
-  countdownSeconds: 10
   overlayTitle: "The Docket"
   physics:
     wheelMass: 1.20

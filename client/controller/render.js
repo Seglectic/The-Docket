@@ -11,6 +11,7 @@ import {
 } from "./core.js";
 
 const GAME_STATUS_LABELS = {
+  active: "Active",
   in: "In",
   out: "Out",
   seasonal: "Seasonal",
@@ -19,11 +20,12 @@ const GAME_STATUS_LABELS = {
 };
 
 const GAME_STATUS_ORDER = {
-  in: 0,
-  out: 1,
-  seasonal: 2,
-  new_release: 3,
-  queue: 4,
+  active: 0,
+  in: 1,
+  out: 2,
+  seasonal: 3,
+  new_release: 4,
+  queue: 5,
 };
 
 const GAME_GROUPS = [
@@ -59,6 +61,19 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
       <path d="M4 5l16 14" />
     </svg>
   `;
+  const renderCache = {
+    queue: null,
+    spin: null,
+    games: null,
+    twitch: null,
+    storage: null,
+    viewerChoice: null,
+    lockItIn: null,
+    confirm: null,
+    wheelFeel: null,
+    coverPreview: null,
+    connections: null,
+  };
 
   function footerBrandText() {
     const version = state.admin?.appVersion || "0.1.0";
@@ -110,6 +125,7 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     const nextStatus = GAME_STATUS_LABELS[status] ? status : "in";
     els.gameStatus.value = nextStatus;
     [
+      els.gameStatusActive,
       els.gameStatusIn,
       els.gameStatusOut,
       els.gameStatusSeasonal,
@@ -189,6 +205,14 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
   }
 
   function renderQueue() {
+    const queueSignature = JSON.stringify({
+      queue: state.admin.queue,
+      queueStartId: state.pending.queueStartId,
+    });
+    if (renderCache.queue === queueSignature) {
+      return;
+    }
+    renderCache.queue = queueSignature;
     const queue = state.admin.queue
       .slice()
       .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -238,18 +262,42 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
 
   function renderSpin() {
     const spin = state.admin.activeSpin;
+    const activeGame = state.admin.activeGame || state.admin.games.find((game) => game.status === "active") || null;
+    const spinSignature = JSON.stringify({
+      spin,
+      activeGame,
+      nextGame: state.pending.nextGame,
+      queueStartId: state.pending.queueStartId,
+    });
+    if (renderCache.spin === spinSignature) {
+      return;
+    }
+    renderCache.spin = spinSignature;
     els.nextGameButton.disabled = Boolean(spin || state.pending.nextGame || state.pending.queueStartId);
-    els.forceResolveButton.disabled = Boolean(!spin || state.pending.forceResolve);
     els.debugViewersChoiceButton.disabled = Boolean(spin || state.pending.debugViewersChoice || state.pending.queueStartId);
-    const entries = spin?.entries || [];
-    els.weightTarget.innerHTML = entries.length
-      ? entries.map((entry) => `<option value="${entry.entryId}">${escapeHtml(entry.label)} (${entry.finalWeight})</option>`).join("")
-      : `<option value="">No active countdown</option>`;
-    els.weightTarget.disabled = !entries.length;
+    els.spinActiveGameContent.innerHTML = activeGame
+      ? `
+        <div class="game-row">
+          <div class="game-thumb" style="${coverStyle(activeGame.cover, activeGame.coverFallback)}"></div>
+          <div class="game-row__body">
+            <strong>${escapeHtml(activeGame.title)}</strong>
+            <div class="muted">${activeGame.releaseYear || "Year unknown"} • Weight ${activeGame.baseWeight}</div>
+          </div>
+        </div>
+      `
+      : `<div class="muted">No active game yet. The next completed next-game spin will set one.</div>`;
   }
 
   function renderGames() {
     const activeOverrideId = state.admin.session?.overrideGameId || null;
+    const gamesSignature = JSON.stringify({
+      games: state.admin.games,
+      activeOverrideId,
+    });
+    if (renderCache.games === gamesSignature) {
+      return;
+    }
+    renderCache.games = gamesSignature;
     const games = state.admin.games.slice().sort((a, b) => {
       const statusDiff = (GAME_STATUS_ORDER[a.status] ?? 99) - (GAME_STATUS_ORDER[b.status] ?? 99);
       if (statusDiff !== 0) {
@@ -345,8 +393,35 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     els.wheelFeelModal.classList.toggle("hidden", !state.ui.wheelFeelOpen);
   }
 
+  function renderConfirmModal() {
+    const options = state.ui.confirmOptions || {};
+    const confirmSignature = JSON.stringify({
+      open: state.ui.confirmOpen,
+      options,
+    });
+    if (renderCache.confirm === confirmSignature) {
+      return;
+    }
+    renderCache.confirm = confirmSignature;
+    els.confirmModal.classList.toggle("hidden", !state.ui.confirmOpen);
+    if (!state.ui.confirmOpen) {
+      return;
+    }
+    els.confirmEyebrow.textContent = options.eyebrow || "Confirm";
+    els.confirmTitle.textContent = options.title || "Are you sure?";
+    els.confirmCopy.textContent = options.copy || "";
+    els.confirmAccept.textContent = options.confirmLabel || "Confirm";
+    els.confirmAccept.classList.toggle("danger", options.intent !== "default");
+    els.confirmAccept.classList.toggle("secondary", options.intent === "default");
+  }
+
   function renderTwitch() {
     const twitch = state.admin.twitch || {};
+    const twitchSignature = JSON.stringify(twitch);
+    if (renderCache.twitch === twitchSignature) {
+      return;
+    }
+    renderCache.twitch = twitchSignature;
     const connected = Boolean(twitch.connected);
     const configured = Boolean(twitch.configured);
     const scopeText = Array.isArray(twitch.scopes) && twitch.scopes.length ? twitch.scopes.join(", ") : "none";
@@ -385,6 +460,19 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     if (!physics || !timings) {
       return;
     }
+    const wheelFeelSignature = JSON.stringify({
+      physics,
+      timings,
+      cooldown: state.admin.wheelConfig?.lockItInCooldownRounds ?? 0,
+    });
+    if (renderCache.wheelFeel === wheelFeelSignature) {
+      return;
+    }
+    renderCache.wheelFeel = wheelFeelSignature;
+    const cooldown = state.admin.wheelConfig?.lockItInCooldownRounds ?? 0;
+    if (document.activeElement !== els.lockItInCooldown) {
+      els.lockItInCooldown.value = cooldown;
+    }
 
     syncNumericSlider(els.launchEnergy, els.launchEnergyOutput, physics.launchEnergy);
     syncNumericSlider(els.friction, els.frictionOutput, physics.friction);
@@ -396,6 +484,11 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
 
   function renderConnections() {
     const connections = state.admin.connections;
+    const connectionsSignature = JSON.stringify(connections);
+    if (renderCache.connections === connectionsSignature) {
+      return;
+    }
+    renderCache.connections = connectionsSignature;
     if (!connections) {
       els.instanceLine.textContent = "Connections: --";
     } else {
@@ -408,8 +501,45 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     footerDecoders.brand.setText(footerBrandText());
   }
 
+  function renderStorageUsage() {
+    const storage = state.admin.storage;
+    const storageSignature = JSON.stringify(storage);
+    if (renderCache.storage === storageSignature) {
+      return;
+    }
+    renderCache.storage = storageSignature;
+    if (!storage) {
+      els.storageUsageLabel.textContent = "--";
+      els.storageUsageDetail.textContent = "Storage summary unavailable";
+      els.storageBreakdown.textContent = "";
+      els.storageMeterFill.style.height = "0%";
+      return;
+    }
+
+    const percent = Math.max(0, Math.min(100, Number(storage.percentUsed || 0)));
+    els.storageUsageLabel.textContent = `${formatBytes(storage.totalBytes)} / ${formatBytes(storage.limitBytes)}`;
+    els.storageUsageDetail.textContent = `${percent.toFixed(1)}% of the 1 GB controller budget`;
+    els.storageBreakdown.innerHTML = [
+      `Covers ${formatBytes(storage.breakdown?.coversBytes || 0)}`,
+      `Events ${formatBytes(storage.breakdown?.eventLogBytes || 0)}`,
+      `Spins ${formatBytes(storage.breakdown?.spinsBytes || 0)}`,
+      `Runtime ${formatBytes(storage.breakdown?.runtimeBytes || 0)}`,
+    ]
+      .map((line) => `<span>${escapeHtml(line)}</span>`)
+      .join("");
+    els.storageMeterFill.style.height = `${percent}%`;
+  }
   function renderViewerChoice() {
     const pendingChoice = state.admin.session?.pendingChoice || null;
+    const viewerChoiceSignature = JSON.stringify({
+      pendingChoice,
+      hidden: state.ui.viewerChoiceHidden,
+      games: state.admin.games,
+    });
+    if (renderCache.viewerChoice === viewerChoiceSignature) {
+      return;
+    }
+    renderCache.viewerChoice = viewerChoiceSignature;
     const hasPendingChoice = Boolean(pendingChoice);
     const pendingId = pendingChoice?.spinId || null;
     if (pendingId !== state.ui.lastPendingChoiceId) {
@@ -463,6 +593,17 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
 
   function renderLockItIn() {
     const pendingLockItIn = state.admin.session?.pendingLockItIn || null;
+    const lockItInSignature = JSON.stringify({
+      pendingLockItIn,
+      hidden: state.ui.lockItInHidden,
+      games: state.admin.games,
+      overlayHidden: state.admin.session?.overlayHidden || false,
+      cooldown: state.admin.wheelConfig?.lockItInCooldownRounds ?? 0,
+    });
+    if (renderCache.lockItIn === lockItInSignature) {
+      return;
+    }
+    renderCache.lockItIn = lockItInSignature;
     const hasPending = Boolean(pendingLockItIn);
     const pendingId = pendingLockItIn?.spinId || null;
     if (pendingId !== state.ui.lastPendingLockItInId) {
@@ -627,6 +768,10 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
 
   function updateCoverPreview(coverUrl) {
     const trimmed = String(coverUrl || "").trim();
+    if (renderCache.coverPreview === trimmed) {
+      return;
+    }
+    renderCache.coverPreview = trimmed;
     if (!trimmed) {
       els.gameCoverPreview.innerHTML = brokenImageMarkup;
       els.gameCoverPreview.style.backgroundImage = "";
@@ -671,6 +816,7 @@ export function createRenderer({ request, loadAdminState, runControllerAction, s
     renderGameEditor();
     renderQueueEditor();
     renderWheelFeelModal();
+    renderConfirmModal();
     renderWheelFeel();
     renderTwitch();
     updateCoverPreview(els.gameCover.value);
